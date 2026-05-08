@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { LoadingOverlay } from '@/components/ui/FailsafeProvider';
 
-const PUBLIC_PATHS = ['/', '/login', '/signup', '/register', '/forgot-password'];
+const PUBLIC_PATHS = ['/login', '/signup', '/register', '/forgot-password'];
 const PUBLIC_PREFIXES = ['/reset-password', '/portal'];
 
 export interface User {

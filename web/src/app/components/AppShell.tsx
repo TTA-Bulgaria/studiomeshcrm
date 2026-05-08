@@ -26,9 +26,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-  const isPublic =
-    pathname === '/' ||
-    PUBLIC_PREFIXES.some((prefix) => pathname?.startsWith(prefix));
+  const isPublic = PUBLIC_PREFIXES.some((prefix) => pathname?.startsWith(prefix));
 
   if (isPublic) {
     return <>{children}</>;

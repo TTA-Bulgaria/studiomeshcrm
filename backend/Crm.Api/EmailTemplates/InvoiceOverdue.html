@@ -1,0 +1,21 @@
+<h1>Invoice {{ invoicenumber }} is overdue</h1>
+<p>Hi {{ clientname }},</p>
+<p>This is a friendly reminder that the following invoice is now overdue.</p>
+<table style="width:100%;border-collapse:collapse;font-size:14px;margin:16px 0;">
+  <tr style="background:#fef2f2;">
+    <td style="padding:10px 14px;color:#dc2626;font-weight:600;">Invoice #</td>
+    <td style="padding:10px 14px;color:#374151;">{{ invoicenumber }}</td>
+  </tr>
+  <tr>
+    <td style="padding:10px 14px;color:#6b7280;font-weight:600;">Amount Due</td>
+    <td style="padding:10px 14px;color:#dc2626;font-weight:700;font-size:16px;">{{ amountdue }}</td>
+  </tr>
+  <tr style="background:#f9fafb;">
+    <td style="padding:10px 14px;color:#6b7280;font-weight:600;">Was Due On</td>
+    <td style="padding:10px 14px;color:#374151;">{{ duedate }}</td>
+  </tr>
+</table>
+<p style="text-align:center">
+  <a href="{{ paymentlink }}" class="btn">Pay Now</a>
+</p>
+<p>If you've already arranged payment, please disregard this message. If you have any questions or need to discuss payment terms, please reply to this email.</p>

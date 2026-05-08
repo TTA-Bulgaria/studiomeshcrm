@@ -118,6 +118,9 @@ builder.Services.AddScoped<IAdPlatformClient>(sp => sp.GetRequiredService<MetaAd
 
 // Notifications
 builder.Services.AddHttpClient<ISlackService, SlackService>();
+builder.Services.AddHttpClient(); // IHttpClientFactory for FacebookOAuthController
+builder.Services.AddMemoryCache(); // IMemoryCache for FacebookOAuthController
+builder.Services.AddScoped<IEmailTemplateRenderer, EmailTemplateRenderer>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ISlackService, SlackService>();
 
