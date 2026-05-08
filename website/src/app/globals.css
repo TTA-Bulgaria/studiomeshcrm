@@ -9,15 +9,26 @@
     scroll-behavior: smooth;
   }
   body {
-    @apply bg-white text-gray-900 antialiased;
+    @apply bg-white text-slate-900 antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
 }
 
 @layer utilities {
   .gradient-text {
-    @apply bg-gradient-to-r from-brand-600 to-purple-400 bg-clip-text text-transparent;
+    background: linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #7c3aed 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
   .gradient-bg {
     @apply bg-gradient-to-br from-brand-600 to-brand-800;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
   }
 }
