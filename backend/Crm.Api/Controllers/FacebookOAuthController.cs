@@ -106,6 +106,9 @@ public class FacebookOAuthController : ControllerBase
 
             var longTokenResponse = await _httpClient.GetFromJsonAsync<FacebookTokenResponse>(longTokenUrl);
             var longLivedToken = longTokenResponse?.AccessToken ?? shortTokenResponse.AccessToken;
+            var tokenExpiresAt = longTokenResponse?.ExpiresIn.HasValue == true
+                ? DateTime.UtcNow.AddSeconds(longTokenResponse.ExpiresIn.Value)
+                : DateTime.UtcNow.AddDays(60);
 
             // Fetch ad accounts this user has access to
             var accountsUrl = $"https://graph.facebook.com/v19.0/me/adaccounts" +
@@ -121,6 +124,7 @@ public class FacebookOAuthController : ControllerBase
                 ProjectId = oauthState.ProjectId,
                 TenantId = oauthState.TenantId,
                 LongLivedToken = longLivedToken,
+                TokenExpiresAt = tokenExpiresAt,
                 AdAccounts = adAccounts
             }, TimeSpan.FromMinutes(15));
 
@@ -184,6 +188,7 @@ public class FacebookOAuthController : ControllerBase
             if (existing != null)
             {
                 existing.AccessToken = oauthSession.LongLivedToken;
+                existing.TokenExpiresAt = oauthSession.TokenExpiresAt;
                 existing.IsActive = true;
                 await _adAccountRepo.UpdateAsync(existing);
             }
@@ -196,6 +201,7 @@ public class FacebookOAuthController : ControllerBase
                     Platform = AdPlatform.Meta,
                     ExternalAccountId = account.Id,
                     AccessToken = oauthSession.LongLivedToken,
+                    TokenExpiresAt = oauthSession.TokenExpiresAt,
                     IsActive = true,
                     TenantId = oauthSession.TenantId
                 });
@@ -225,6 +231,7 @@ internal record FacebookOAuthSession
     public Guid ProjectId { get; init; }
     public Guid TenantId { get; init; }
     public string LongLivedToken { get; init; } = string.Empty;
+    public DateTime TokenExpiresAt { get; init; }
     public List<FacebookAdAccount> AdAccounts { get; init; } = new();
 }
 
@@ -232,6 +239,9 @@ internal record FacebookTokenResponse
 {
     [JsonPropertyName("access_token")]
     public string? AccessToken { get; init; }
+
+    [JsonPropertyName("expires_in")]
+    public int? ExpiresIn { get; init; }
 }
 
 internal record FacebookAdAccountsResponse

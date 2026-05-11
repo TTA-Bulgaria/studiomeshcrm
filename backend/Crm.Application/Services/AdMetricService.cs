@@ -1,7 +1,9 @@
 using Crm.Application.DTOs.AdMetrics;
+using Crm.Application.Exceptions;
 using Crm.Application.Interfaces;
 using Crm.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Crm.Application.Services;
 
@@ -13,6 +15,7 @@ public class AdMetricService : IAdMetricService
     private readonly IGenericRepository<ProjectAdAccount> _adAccountRepository;
     private readonly IEnumerable<IAdPlatformClient> _platformClients;
     private readonly ICurrentUserContext _currentUserContext;
+    private readonly ILogger<AdMetricService> _logger;
 
     public AdMetricService(
         IGenericRepository<AdMetric> repository,
@@ -20,7 +23,8 @@ public class AdMetricService : IAdMetricService
         IGenericRepository<Contract> contractRepository,
         IGenericRepository<ProjectAdAccount> adAccountRepository,
         IEnumerable<IAdPlatformClient> platformClients,
-        ICurrentUserContext currentUserContext)
+        ICurrentUserContext currentUserContext,
+        ILogger<AdMetricService> logger)
     {
         _repository = repository;
         _projectRepository = projectRepository;
@@ -28,6 +32,7 @@ public class AdMetricService : IAdMetricService
         _adAccountRepository = adAccountRepository;
         _platformClients = platformClients;
         _currentUserContext = currentUserContext;
+        _logger = logger;
     }
 
     private Guid TenantId => _currentUserContext.TenantId ?? Guid.Empty;
@@ -108,13 +113,46 @@ public class AdMetricService : IAdMetricService
 
         foreach (var account in accounts)
         {
+            // Token expired — mark inactive so the user knows to reconnect
+            if (account.TokenExpiresAt.HasValue && account.TokenExpiresAt.Value <= DateTime.UtcNow)
+            {
+                _logger.LogWarning(
+                    "Access token expired for ad account {AccountId} (project {ProjectId}). Marking inactive.",
+                    account.Id, projectId);
+                account.IsActive = false;
+                await _adAccountRepository.UpdateAsync(account);
+                continue;
+            }
+
             var client = _platformClients.FirstOrDefault(c => c.Platform == account.Platform);
             if (client == null) continue;
 
             for (int i = 0; i <= 1; i++)
             {
                 var date = DateTime.UtcNow.AddDays(-i).Date;
-                var newMetrics = await client.FetchDailyMetricsAsync(account.ExternalAccountId, date, account.AccessToken ?? string.Empty);
+
+                IEnumerable<AdMetric> newMetrics;
+                try
+                {
+                    newMetrics = await client.FetchDailyMetricsAsync(
+                        account.ExternalAccountId, date, account.AccessToken ?? string.Empty);
+                }
+                catch (AdPlatformException ex) when (ex.IsTokenExpired)
+                {
+                    _logger.LogWarning(
+                        "Token rejected by platform for ad account {AccountId}. Marking inactive.",
+                        account.Id);
+                    account.IsActive = false;
+                    await _adAccountRepository.UpdateAsync(account);
+                    break; // Stop syncing this account's dates
+                }
+                catch (AdPlatformException ex)
+                {
+                    _logger.LogError(
+                        "Platform error syncing ad account {AccountId} on {Date}: {Message}",
+                        account.Id, date, ex.Message);
+                    continue; // Skip this date, try next
+                }
 
                 foreach (var m in newMetrics)
                 {

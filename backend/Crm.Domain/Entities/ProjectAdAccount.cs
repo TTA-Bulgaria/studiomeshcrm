@@ -9,7 +9,8 @@ public class ProjectAdAccount : BaseEntity, ITenantedEntity
     
     public AdPlatform Platform { get; set; }
     public string ExternalAccountId { get; set; } = string.Empty;
-    public string? AccessToken { get; set; } // Simplified for MVP
+    public string? AccessToken { get; set; }
+    public DateTime? TokenExpiresAt { get; set; }
     public bool IsActive { get; set; } = true;
     
     public Guid TenantId { get; set; }
