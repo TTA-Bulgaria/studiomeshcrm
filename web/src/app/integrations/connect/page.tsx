@@ -98,6 +98,7 @@ function ConnectPageContent() {
   }
 
   if (error) {
+    const isSessionExpired = error.includes('Session expired') || error.includes('No session');
     return (
       <div className="flex min-h-screen items-center justify-center p-4">
         <Card className="w-full max-w-md">
@@ -105,7 +106,16 @@ function ConnectPageContent() {
             <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
             <h2 className="text-lg font-semibold text-slate-900 mb-2">Connection failed</h2>
             <p className="text-slate-500 text-sm mb-6">{error}</p>
-            <Button onClick={() => router.back()} variant="outline">Go back</Button>
+            <div className="flex flex-col gap-2">
+              {isSessionExpired ? (
+                <p className="text-xs text-slate-400 mb-2">
+                  The connection window expired. Go back to your project and click &quot;Connect Facebook Ads&quot; to try again.
+                </p>
+              ) : null}
+              <Button onClick={() => router.back()}>
+                {isSessionExpired ? 'Back to project' : 'Try again'}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -117,7 +127,11 @@ function ConnectPageContent() {
       <div className="flex min-h-screen items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardContent className="py-8 text-center">
-            <p className="text-slate-500 text-sm mb-6">No ad accounts found on this Facebook account.</p>
+            <h2 className="text-lg font-semibold text-slate-900 mb-2">No ad accounts found</h2>
+            <p className="text-slate-500 text-sm mb-6">
+              This Facebook account has no ad accounts. Make sure you&apos;re connected with
+              the right account, or create an ad account in Meta Business Suite first.
+            </p>
             <Button onClick={() => router.back()} variant="outline">Go back</Button>
           </CardContent>
         </Card>

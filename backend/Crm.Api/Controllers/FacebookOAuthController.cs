@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Caching.Memory;
 using Crm.Application.Interfaces;
 using Crm.Domain.Entities;
@@ -10,6 +11,7 @@ namespace Crm.Api.Controllers;
 
 [ApiController]
 [Route("api/facebook/oauth")]
+[EnableRateLimiting("facebook-oauth")]
 public class FacebookOAuthController : ControllerBase
 {
     private readonly IConfiguration _config;
@@ -49,7 +51,7 @@ public class FacebookOAuthController : ControllerBase
         {
             ProjectId = projectId,
             TenantId = _userContext.TenantId ?? Guid.Empty
-        }, TimeSpan.FromMinutes(10));
+        }, TimeSpan.FromMinutes(20));
 
         var redirectUri = Uri.EscapeDataString(CallbackUri);
         var scopes = Uri.EscapeDataString("ads_read,ads_management");
@@ -126,7 +128,7 @@ public class FacebookOAuthController : ControllerBase
                 LongLivedToken = longLivedToken,
                 TokenExpiresAt = tokenExpiresAt,
                 AdAccounts = adAccounts
-            }, TimeSpan.FromMinutes(15));
+            }, TimeSpan.FromMinutes(25));
 
             return Redirect($"{FrontendUrl}/integrations/connect?session={sessionKey}");
         }

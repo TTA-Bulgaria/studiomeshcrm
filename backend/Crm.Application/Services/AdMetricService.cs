@@ -177,7 +177,16 @@ public class AdMetricService : IAdMetricService
                 }
             }
         }
-        await _repository.SaveChangesAsync();
+        try
+        {
+            await _repository.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("IX_AdMetrics_AdAccountId_Date") == true
+                                        || ex.InnerException?.Message.Contains("UNIQUE constraint") == true)
+        {
+            // Concurrent sync created the same row — not a real error, data is already up to date
+            _logger.LogInformation("Duplicate AdMetric row skipped for project {ProjectId} (concurrent sync)", projectId);
+        }
     }
 
     public async Task<decimal> GetSpendByRangeAsync(Guid projectId, DateTime start, DateTime end)

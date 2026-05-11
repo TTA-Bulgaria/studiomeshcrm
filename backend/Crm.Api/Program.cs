@@ -1,8 +1,10 @@
 using System;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Crm.Infrastructure.Data;
 using Crm.Application.Interfaces;
@@ -62,6 +64,19 @@ Log.Information("🚀 Starting Agency CRM API in {Environment} mode", builder.En
 Log.Information("🌐 Allowed CORS Origins: {Origins}", string.Join(", ", allowedOrigins));
 
 builder.Services.AddControllers();
+
+// Rate limiting — applied to Facebook OAuth endpoints to prevent abuse
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("facebook-oauth", limiterOptions =>
+    {
+        limiterOptions.PermitLimit = 10;
+        limiterOptions.Window = TimeSpan.FromMinutes(1);
+        limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        limiterOptions.QueueLimit = 0;
+    });
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
 
 // CORS Configuration
 builder.Services.AddCors(options =>
@@ -267,6 +282,7 @@ app.UseCors("DefaultPolicy");
 // Global Exception Handling (RFC 7807)
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
+app.UseRateLimiter();
 app.UseMiddleware<TenantResolutionMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
