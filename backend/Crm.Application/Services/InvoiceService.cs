@@ -148,6 +148,7 @@ public class InvoiceService : IInvoiceService
             DueDate = DateTime.UtcNow.AddDays(30),
             ContractId = contractId,
             ProjectId = contract.ProjectId,
+            ClientId = contract.ClientId,
             Status = InvoiceStatus.Draft,
             Items = items
         };
