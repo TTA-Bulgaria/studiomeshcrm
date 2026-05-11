@@ -196,12 +196,19 @@ public class AuthService
         user.PasswordResetTokenExpiry = null;
         await _userRepository.UpdateAsync(user);
 
-        await _emailService.SendTemplatedEmailAsync(
-            user.Email,
-            "Your password has been changed — Studio Mesh CRM",
-            "PasswordResetConfirmation",
-            new PasswordResetConfirmationModel(user.FullName, user.Email)
-        );
+        try
+        {
+            await _emailService.SendTemplatedEmailAsync(
+                user.Email,
+                "Your password has been changed — Studio Mesh CRM",
+                "PasswordResetConfirmation",
+                new PasswordResetConfirmationModel(user.FullName, user.Email)
+            );
+        }
+        catch
+        {
+            // Confirmation email failure must not roll back a successful password reset
+        }
 
         return true;
     }
