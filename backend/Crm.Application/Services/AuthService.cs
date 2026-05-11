@@ -153,7 +153,7 @@ public class AuthService
         user.EmailVerificationToken = token;
         await _userRepository.UpdateAsync(user);
 
-        var appUrl = _configuration["AppUrl"] ?? "https://studiomeshcrm.com";
+        var appUrl = _configuration["FrontendUrl"] ?? _configuration["AppUrl"] ?? "https://app.studiomeshcrm.com";
         var verificationLink = $"{appUrl}/verify-email?token={token}";
 
         await _emailService.SendTemplatedEmailAsync(
@@ -174,8 +174,8 @@ public class AuthService
         user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1);
         await _userRepository.UpdateAsync(user);
 
-        var appUrl = _configuration["AppUrl"] ?? "https://studiomeshcrm.com";
-        var resetLink = $"{appUrl}/reset-password?token={token}";
+        var appUrl = _configuration["FrontendUrl"] ?? _configuration["AppUrl"] ?? "https://app.studiomeshcrm.com";
+        var resetLink = $"{appUrl}/reset-password/{token}";
 
         await _emailService.SendTemplatedEmailAsync(
             user.Email,
