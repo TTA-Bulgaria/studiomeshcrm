@@ -35,13 +35,18 @@ public class AdMetricServiceTests
 
         _platformClientMock.Setup(c => c.Platform).Returns(AdPlatform.Google);
 
+        var encryptionMock = new Mock<ITokenEncryptionService>();
+        encryptionMock.Setup(e => e.Decrypt(It.IsAny<string>())).Returns((string s) => s);
+
         _service = new AdMetricService(
             _repositoryMock.Object,
             _projectRepositoryMock.Object,
             _contractRepositoryMock.Object,
             _adAccountRepositoryMock.Object,
             new List<IAdPlatformClient> { _platformClientMock.Object },
-            _currentUserContextMock.Object);
+            _currentUserContextMock.Object,
+            encryptionMock.Object,
+            Mock.Of<Microsoft.Extensions.Logging.ILogger<AdMetricService>>());
     }
 
     [Fact]

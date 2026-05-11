@@ -1,6 +1,7 @@
 using System;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -134,7 +135,9 @@ builder.Services.AddScoped<IAdPlatformClient>(sp => sp.GetRequiredService<MetaAd
 // Notifications
 builder.Services.AddHttpClient<ISlackService, SlackService>();
 builder.Services.AddHttpClient(); // IHttpClientFactory for FacebookOAuthController
-builder.Services.AddMemoryCache(); // IMemoryCache for FacebookOAuthController
+builder.Services.AddDataProtection().SetApplicationName("AgencyCrm");
+builder.Services.AddScoped<Crm.Application.Interfaces.ITokenEncryptionService, Crm.Infrastructure.Services.TokenEncryptionService>();
+
 builder.Services.AddScoped<IEmailTemplateRenderer, EmailTemplateRenderer>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ISlackService, SlackService>();

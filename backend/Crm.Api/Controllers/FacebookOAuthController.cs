@@ -1,10 +1,13 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.EntityFrameworkCore;
 using Crm.Application.Interfaces;
 using Crm.Domain.Entities;
+using Crm.Infrastructure.Data;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Crm.Api.Controllers;
@@ -15,43 +18,48 @@ namespace Crm.Api.Controllers;
 public class FacebookOAuthController : ControllerBase
 {
     private readonly IConfiguration _config;
-    private readonly IMemoryCache _cache;
+    private readonly AppDbContext _db;
     private readonly IGenericRepository<ProjectAdAccount> _adAccountRepo;
     private readonly ICurrentUserContext _userContext;
+    private readonly ITokenEncryptionService _encryption;
     private readonly HttpClient _httpClient;
 
     public FacebookOAuthController(
         IConfiguration config,
-        IMemoryCache cache,
+        AppDbContext db,
         IGenericRepository<ProjectAdAccount> adAccountRepo,
         ICurrentUserContext userContext,
+        ITokenEncryptionService encryption,
         IHttpClientFactory httpClientFactory)
     {
         _config = config;
-        _cache = cache;
+        _db = db;
         _adAccountRepo = adAccountRepo;
         _userContext = userContext;
+        _encryption = encryption;
         _httpClient = httpClientFactory.CreateClient();
     }
 
-    /// <summary>
-    /// Step 1: Redirect the user to Facebook's OAuth consent screen.
-    /// Navigate the browser directly to this URL (not as a fetch).
-    /// </summary>
     [Authorize]
     [HttpGet("connect")]
-    public IActionResult Connect([FromQuery] Guid projectId)
+    public async Task<IActionResult> Connect([FromQuery] Guid projectId)
     {
         var appId = _config["MetaAds:AppId"];
         if (string.IsNullOrEmpty(appId))
             return BadRequest(new { message = "Meta App ID is not configured on this server." });
 
+        await PurgeExpiredAsync();
+
         var stateKey = Guid.NewGuid().ToString("N");
-        _cache.Set($"fb_oauth_{stateKey}", new FacebookOAuthState
+        _db.FacebookOAuthSessions.Add(new FacebookOAuthSession
         {
+            Key = stateKey,
+            Phase = FacebookOAuthPhase.State,
             ProjectId = projectId,
-            TenantId = _userContext.TenantId ?? Guid.Empty
-        }, TimeSpan.FromMinutes(20));
+            TenantId = _userContext.TenantId ?? Guid.Empty,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(20)
+        });
+        await _db.SaveChangesAsync();
 
         var redirectUri = Uri.EscapeDataString(CallbackUri);
         var scopes = Uri.EscapeDataString("ads_read,ads_management");
@@ -64,11 +72,6 @@ public class FacebookOAuthController : ControllerBase
         return Redirect(facebookUrl);
     }
 
-    /// <summary>
-    /// Step 2: Facebook redirects here after the user grants permission.
-    /// Exchanges the code for a long-lived token, fetches ad accounts,
-    /// then redirects the browser to the frontend account selector page.
-    /// </summary>
     [HttpGet("callback")]
     public async Task<IActionResult> Callback([FromQuery] string? code, [FromQuery] string? state, [FromQuery] string? error)
     {
@@ -78,17 +81,23 @@ public class FacebookOAuthController : ControllerBase
         if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(state))
             return Redirect($"{FrontendUrl}/integrations?error=invalid_request");
 
-        if (!_cache.TryGetValue($"fb_oauth_{state}", out FacebookOAuthState? oauthState) || oauthState == null)
-            return Redirect($"{FrontendUrl}/integrations?error=session_expired");
+        var oauthState = await _db.FacebookOAuthSessions
+            .FirstOrDefaultAsync(s => s.Key == state && s.Phase == FacebookOAuthPhase.State);
 
-        _cache.Remove($"fb_oauth_{state}");
+        if (oauthState == null || oauthState.ExpiresAt < DateTime.UtcNow)
+        {
+            if (oauthState != null) _db.FacebookOAuthSessions.Remove(oauthState);
+            await _db.SaveChangesAsync();
+            return Redirect($"{FrontendUrl}/integrations?error=session_expired");
+        }
+
+        _db.FacebookOAuthSessions.Remove(oauthState);
 
         var appId = _config["MetaAds:AppId"];
         var appSecret = _config["MetaAds:AppSecret"];
 
         try
         {
-            // Exchange code → short-lived token
             var shortTokenUrl = $"https://graph.facebook.com/v19.0/oauth/access_token" +
                                 $"?client_id={appId}" +
                                 $"&redirect_uri={Uri.EscapeDataString(CallbackUri)}" +
@@ -99,7 +108,6 @@ public class FacebookOAuthController : ControllerBase
             if (shortTokenResponse?.AccessToken == null)
                 return Redirect($"{FrontendUrl}/integrations?error=token_exchange_failed");
 
-            // Exchange short-lived → long-lived token (~60 days)
             var longTokenUrl = $"https://graph.facebook.com/v19.0/oauth/access_token" +
                                $"?grant_type=fb_exchange_token" +
                                $"&client_id={appId}" +
@@ -112,7 +120,6 @@ public class FacebookOAuthController : ControllerBase
                 ? DateTime.UtcNow.AddSeconds(longTokenResponse.ExpiresIn.Value)
                 : DateTime.UtcNow.AddDays(60);
 
-            // Fetch ad accounts this user has access to
             var accountsUrl = $"https://graph.facebook.com/v19.0/me/adaccounts" +
                               $"?fields=id,name,account_status" +
                               $"&access_token={longLivedToken}";
@@ -121,14 +128,18 @@ public class FacebookOAuthController : ControllerBase
             var adAccounts = accountsResponse?.Data ?? new List<FacebookAdAccount>();
 
             var sessionKey = Guid.NewGuid().ToString("N");
-            _cache.Set($"fb_session_{sessionKey}", new FacebookOAuthSession
+            _db.FacebookOAuthSessions.Add(new FacebookOAuthSession
             {
+                Key = sessionKey,
+                Phase = FacebookOAuthPhase.Session,
                 ProjectId = oauthState.ProjectId,
                 TenantId = oauthState.TenantId,
                 LongLivedToken = longLivedToken,
                 TokenExpiresAt = tokenExpiresAt,
-                AdAccounts = adAccounts
-            }, TimeSpan.FromMinutes(25));
+                AdAccountsJson = JsonSerializer.Serialize(adAccounts),
+                ExpiresAt = DateTime.UtcNow.AddMinutes(25)
+            });
+            await _db.SaveChangesAsync();
 
             return Redirect($"{FrontendUrl}/integrations/connect?session={sessionKey}");
         }
@@ -138,20 +149,23 @@ public class FacebookOAuthController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Step 3: Frontend calls this to get the list of ad accounts from the OAuth session.
-    /// </summary>
     [Authorize]
     [HttpGet("accounts")]
-    public IActionResult GetAccounts([FromQuery] string session)
+    public async Task<IActionResult> GetAccounts([FromQuery] string session)
     {
-        if (!_cache.TryGetValue($"fb_session_{session}", out FacebookOAuthSession? oauthSession) || oauthSession == null)
+        var oauthSession = await _db.FacebookOAuthSessions
+            .FirstOrDefaultAsync(s => s.Key == session && s.Phase == FacebookOAuthPhase.Session);
+
+        if (oauthSession == null || oauthSession.ExpiresAt < DateTime.UtcNow)
             return NotFound(new { message = "Session not found or expired. Please reconnect." });
+
+        var accounts = JsonSerializer.Deserialize<List<FacebookAdAccount>>(oauthSession.AdAccountsJson ?? "[]")
+                       ?? new List<FacebookAdAccount>();
 
         return Ok(new
         {
             projectId = oauthSession.ProjectId,
-            accounts = oauthSession.AdAccounts.Select(a => new
+            accounts = accounts.Select(a => new
             {
                 id = a.Id,
                 name = a.Name,
@@ -160,36 +174,39 @@ public class FacebookOAuthController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// Step 4: Frontend posts the user's selected accounts to save them.
-    /// </summary>
     [Authorize]
     [HttpPost("link")]
     public async Task<IActionResult> LinkAccounts([FromBody] LinkAccountsRequest request)
     {
-        if (!_cache.TryGetValue($"fb_session_{request.Session}", out FacebookOAuthSession? oauthSession) || oauthSession == null)
+        var oauthSession = await _db.FacebookOAuthSessions
+            .FirstOrDefaultAsync(s => s.Key == request.Session && s.Phase == FacebookOAuthPhase.Session);
+
+        if (oauthSession == null || oauthSession.ExpiresAt < DateTime.UtcNow)
             return BadRequest(new { message = "Session expired. Please reconnect Facebook." });
 
-        _cache.Remove($"fb_session_{request.Session}");
+        _db.FacebookOAuthSessions.Remove(oauthSession);
 
-        var selectedAccounts = oauthSession.AdAccounts
+        var allAccounts = JsonSerializer.Deserialize<List<FacebookAdAccount>>(oauthSession.AdAccountsJson ?? "[]")
+                          ?? new List<FacebookAdAccount>();
+
+        var selectedAccounts = allAccounts
             .Where(a => request.SelectedAccountIds.Contains(a.Id))
             .ToList();
 
         if (!selectedAccounts.Any())
             return BadRequest(new { message = "No accounts selected." });
 
-        var allAccounts = await _adAccountRepo.GetAllAsync();
+        var encryptedToken = _encryption.Encrypt(oauthSession.LongLivedToken ?? string.Empty);
         var linked = 0;
 
         foreach (var account in selectedAccounts)
         {
-            var existing = allAccounts.FirstOrDefault(a =>
-                a.ExternalAccountId == account.Id && a.ProjectId == oauthSession.ProjectId);
+            var existing = await _adAccountRepo.AsQueryable()
+                .FirstOrDefaultAsync(a => a.ExternalAccountId == account.Id && a.ProjectId == oauthSession.ProjectId);
 
             if (existing != null)
             {
-                existing.AccessToken = oauthSession.LongLivedToken;
+                existing.AccessToken = encryptedToken;
                 existing.TokenExpiresAt = oauthSession.TokenExpiresAt;
                 existing.IsActive = true;
                 await _adAccountRepo.UpdateAsync(existing);
@@ -202,7 +219,7 @@ public class FacebookOAuthController : ControllerBase
                     ProjectId = oauthSession.ProjectId,
                     Platform = AdPlatform.Meta,
                     ExternalAccountId = account.Id,
-                    AccessToken = oauthSession.LongLivedToken,
+                    AccessToken = encryptedToken,
                     TokenExpiresAt = oauthSession.TokenExpiresAt,
                     IsActive = true,
                     TenantId = oauthSession.TenantId
@@ -213,7 +230,20 @@ public class FacebookOAuthController : ControllerBase
         }
 
         await _adAccountRepo.SaveChangesAsync();
+        await _db.SaveChangesAsync();
         return Ok(new { linked, projectId = oauthSession.ProjectId });
+    }
+
+    private async Task PurgeExpiredAsync()
+    {
+        var expired = await _db.FacebookOAuthSessions
+            .Where(s => s.ExpiresAt < DateTime.UtcNow)
+            .ToListAsync();
+        if (expired.Count > 0)
+        {
+            _db.FacebookOAuthSessions.RemoveRange(expired);
+            await _db.SaveChangesAsync();
+        }
     }
 
     private string CallbackUri => $"{_config["AppUrl"] ?? "https://studiomeshcrm.com"}/api/facebook/oauth/callback";
@@ -221,21 +251,6 @@ public class FacebookOAuthController : ControllerBase
 }
 
 // ── Supporting types ────────────────────────────────────────────────────────
-
-internal record FacebookOAuthState
-{
-    public Guid ProjectId { get; init; }
-    public Guid TenantId { get; init; }
-}
-
-internal record FacebookOAuthSession
-{
-    public Guid ProjectId { get; init; }
-    public Guid TenantId { get; init; }
-    public string LongLivedToken { get; init; } = string.Empty;
-    public DateTime TokenExpiresAt { get; init; }
-    public List<FacebookAdAccount> AdAccounts { get; init; } = new();
-}
 
 internal record FacebookTokenResponse
 {

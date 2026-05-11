@@ -15,6 +15,7 @@ public class AdMetricService : IAdMetricService
     private readonly IGenericRepository<ProjectAdAccount> _adAccountRepository;
     private readonly IEnumerable<IAdPlatformClient> _platformClients;
     private readonly ICurrentUserContext _currentUserContext;
+    private readonly ITokenEncryptionService _encryption;
     private readonly ILogger<AdMetricService> _logger;
 
     public AdMetricService(
@@ -24,6 +25,7 @@ public class AdMetricService : IAdMetricService
         IGenericRepository<ProjectAdAccount> adAccountRepository,
         IEnumerable<IAdPlatformClient> platformClients,
         ICurrentUserContext currentUserContext,
+        ITokenEncryptionService encryption,
         ILogger<AdMetricService> logger)
     {
         _repository = repository;
@@ -32,6 +34,7 @@ public class AdMetricService : IAdMetricService
         _adAccountRepository = adAccountRepository;
         _platformClients = platformClients;
         _currentUserContext = currentUserContext;
+        _encryption = encryption;
         _logger = logger;
     }
 
@@ -127,6 +130,8 @@ public class AdMetricService : IAdMetricService
             var client = _platformClients.FirstOrDefault(c => c.Platform == account.Platform);
             if (client == null) continue;
 
+            var accessToken = _encryption.Decrypt(account.AccessToken ?? string.Empty);
+
             for (int i = 0; i <= 1; i++)
             {
                 var date = DateTime.UtcNow.AddDays(-i).Date;
@@ -135,7 +140,7 @@ public class AdMetricService : IAdMetricService
                 try
                 {
                     newMetrics = await client.FetchDailyMetricsAsync(
-                        account.ExternalAccountId, date, account.AccessToken ?? string.Empty);
+                        account.ExternalAccountId, date, accessToken);
                 }
                 catch (AdPlatformException ex) when (ex.IsTokenExpired)
                 {
