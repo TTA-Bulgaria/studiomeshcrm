@@ -2,7 +2,6 @@ using Crm.Application.DTOs.AdMetrics;
 using Crm.Application.Interfaces;
 using Crm.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
-using System.Linq;
 
 namespace Crm.Application.Services;
 
@@ -16,7 +15,7 @@ public class AdMetricService : IAdMetricService
     private readonly ICurrentUserContext _currentUserContext;
 
     public AdMetricService(
-        IGenericRepository<AdMetric> repository, 
+        IGenericRepository<AdMetric> repository,
         IGenericRepository<Project> projectRepository,
         IGenericRepository<Contract> contractRepository,
         IGenericRepository<ProjectAdAccount> adAccountRepository,
@@ -31,30 +30,38 @@ public class AdMetricService : IAdMetricService
         _currentUserContext = currentUserContext;
     }
 
+    private Guid TenantId => _currentUserContext.TenantId ?? Guid.Empty;
+
     public async Task<IEnumerable<AdMetricResponse>> GetProjectMetricsAsync(Guid projectId)
     {
-        var metrics = await _repository.GetAllAsync();
-        return metrics.Where(m => m.ProjectId == projectId).Select(MapToResponse).ToList();
+        var metrics = await _repository.AsQueryable()
+            .Where(m => m.ProjectId == projectId && m.TenantId == TenantId)
+            .ToListAsync();
+        return metrics.Select(MapToResponse);
     }
 
     public async Task<IEnumerable<AdMetricResponse>> GetAllAsync()
     {
-        var metrics = await _repository.GetAllAsync();
-        return metrics.Select(MapToResponse).ToList();
+        var metrics = await _repository.AsQueryable()
+            .Where(m => m.TenantId == TenantId)
+            .ToListAsync();
+        return metrics.Select(MapToResponse);
     }
 
     public async Task<AdMetricAnalyticsResponse> GetProjectAnalyticsAsync(Guid projectId)
     {
         var metrics = await _repository.AsQueryable()
-            .Where(m => m.ProjectId == projectId)
+            .Where(m => m.ProjectId == projectId && m.TenantId == TenantId)
             .ToListAsync();
-        var contracts = await _contractRepository.GetAllAsync();
-        var projectContracts = contracts.Where(c => c.ProjectId == projectId && c.Status == ContractStatus.Signed).ToList();
+
+        var contracts = await _contractRepository.AsQueryable()
+            .Where(c => c.ProjectId == projectId && c.TenantId == TenantId && c.Status == ContractStatus.Signed)
+            .ToListAsync();
 
         var totalSpend = metrics.Sum(m => m.Spend);
-        var totalRevenue = projectContracts.Sum(c => c.TotalAmount);
+        var totalRevenue = contracts.Sum(c => c.TotalAmount);
 
-        var analytics = new AdMetricAnalyticsResponse
+        return new AdMetricAnalyticsResponse
         {
             ProjectId = projectId,
             TotalSpend = totalSpend,
@@ -65,20 +72,22 @@ public class AdMetricService : IAdMetricService
             ROAS = totalSpend > 0 ? totalRevenue / totalSpend : 0,
             ProjectROI = totalSpend > 0 ? (totalRevenue - totalSpend) / totalSpend * 100 : 0
         };
-
-        return analytics;
     }
 
     public async Task<AdMetricAnalyticsResponse> GetGlobalAnalyticsAsync()
     {
-        var metrics = (await _repository.GetAllAsync()).ToList();
-        var contracts = await _contractRepository.GetAllAsync();
-        var signedContracts = contracts.Where(c => c.Status == ContractStatus.Signed).ToList();
+        var metrics = await _repository.AsQueryable()
+            .Where(m => m.TenantId == TenantId)
+            .ToListAsync();
+
+        var contracts = await _contractRepository.AsQueryable()
+            .Where(c => c.TenantId == TenantId && c.Status == ContractStatus.Signed)
+            .ToListAsync();
 
         var totalSpend = metrics.Sum(m => m.Spend);
-        var totalRevenue = signedContracts.Sum(c => c.TotalAmount);
+        var totalRevenue = contracts.Sum(c => c.TotalAmount);
 
-        var analytics = new AdMetricAnalyticsResponse
+        return new AdMetricAnalyticsResponse
         {
             ProjectId = Guid.Empty,
             TotalSpend = totalSpend,
@@ -89,21 +98,19 @@ public class AdMetricService : IAdMetricService
             ROAS = totalSpend > 0 ? totalRevenue / totalSpend : 0,
             ProjectROI = totalSpend > 0 ? (totalRevenue - totalSpend) / totalSpend * 100 : 0
         };
-
-        return analytics;
     }
 
     public async Task SyncMetricsAsync(Guid projectId)
     {
-        var accounts = (await _adAccountRepository.GetAllAsync())
-            .Where(a => a.ProjectId == projectId && a.IsActive);
+        var accounts = await _adAccountRepository.AsQueryable()
+            .Where(a => a.ProjectId == projectId && a.TenantId == TenantId && a.IsActive)
+            .ToListAsync();
 
         foreach (var account in accounts)
         {
             var client = _platformClients.FirstOrDefault(c => c.Platform == account.Platform);
             if (client == null) continue;
 
-            // Sync last 2 days to ensure no gaps
             for (int i = 0; i <= 1; i++)
             {
                 var date = DateTime.UtcNow.AddDays(-i).Date;
@@ -111,9 +118,8 @@ public class AdMetricService : IAdMetricService
 
                 foreach (var m in newMetrics)
                 {
-                    // Check if already exists to prevent duplicates
-                    var existing = (await _repository.GetAllAsync())
-                        .FirstOrDefault(em => em.AdAccountId == account.Id && em.Date.Date == date.Date);
+                    var existing = await _repository.AsQueryable()
+                        .FirstOrDefaultAsync(em => em.AdAccountId == account.Id && em.Date.Date == date.Date);
 
                     if (existing != null)
                     {
@@ -139,14 +145,18 @@ public class AdMetricService : IAdMetricService
     public async Task<decimal> GetSpendByRangeAsync(Guid projectId, DateTime start, DateTime end)
     {
         var metrics = await _repository.AsQueryable()
-            .Where(m => m.ProjectId == projectId && m.Date >= start && m.Date <= end)
+            .Where(m => m.ProjectId == projectId && m.TenantId == TenantId && m.Date >= start && m.Date <= end)
             .ToListAsync();
-        
+
         return metrics.Sum(m => m.Spend);
     }
 
     public async Task<AdMetricResponse> CreateAsync(CreateAdMetricRequest request)
     {
+        var project = await _projectRepository.GetByIdAsync(request.ProjectId);
+        if (project == null || project.TenantId != TenantId)
+            throw new UnauthorizedAccessException("Project not found or access denied.");
+
         var metric = new AdMetric
         {
             Id = Guid.NewGuid(),
@@ -157,7 +167,7 @@ public class AdMetricService : IAdMetricService
             Clicks = request.Clicks,
             Conversions = request.Conversions,
             Date = request.Date,
-            TenantId = _currentUserContext.TenantId ?? Guid.Empty
+            TenantId = TenantId
         };
 
         await _repository.AddAsync(metric);
@@ -166,19 +176,16 @@ public class AdMetricService : IAdMetricService
         return MapToResponse(metric);
     }
 
-    private AdMetricResponse MapToResponse(AdMetric m)
+    private AdMetricResponse MapToResponse(AdMetric m) => new()
     {
-        return new AdMetricResponse
-        {
-            Id = m.Id,
-            ProjectId = m.ProjectId,
-            Platform = m.Platform,
-            Spend = m.Spend,
-            Impressions = m.Impressions,
-            Clicks = m.Clicks,
-            Conversions = m.Conversions,
-            Date = m.Date,
-            CreatedAt = m.CreatedAt
-        };
-    }
+        Id = m.Id,
+        ProjectId = m.ProjectId,
+        Platform = m.Platform,
+        Spend = m.Spend,
+        Impressions = m.Impressions,
+        Clicks = m.Clicks,
+        Conversions = m.Conversions,
+        Date = m.Date,
+        CreatedAt = m.CreatedAt
+    };
 }

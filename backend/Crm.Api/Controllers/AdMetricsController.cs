@@ -1,6 +1,5 @@
 using Crm.Application.DTOs.AdMetrics;
 using Crm.Application.Interfaces;
-using Crm.Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -36,8 +35,15 @@ public class AdMetricsController : ControllerBase
     [Authorize(Roles = "Admin,ProjectManager")]
     public async Task<ActionResult<AdMetricResponse>> CreateMetric(CreateAdMetricRequest request)
     {
-        var response = await _adMetricService.CreateAsync(request);
-        return Ok(response);
+        try
+        {
+            var response = await _adMetricService.CreateAsync(request);
+            return Ok(response);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
     }
 
     [HttpGet("project/{projectId}/analytics")]
