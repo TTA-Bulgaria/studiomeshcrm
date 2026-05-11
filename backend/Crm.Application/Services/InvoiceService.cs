@@ -165,6 +165,9 @@ public class InvoiceService : IInvoiceService
         var project = await _projectRepository.GetByIdAsync(projectId)
             ?? throw new KeyNotFoundException("Project not found");
 
+        if (project.ClientId == null)
+            throw new InvalidOperationException("Cannot generate an invoice for a project with no client linked.");
+
         var invoice = new Invoice
         {
             Id = Guid.NewGuid(),
@@ -173,6 +176,7 @@ public class InvoiceService : IInvoiceService
             Currency = "USD",
             DueDate = DateTime.UtcNow.AddDays(14),
             ProjectId = projectId,
+            ClientId = project.ClientId.Value,
             Status = InvoiceStatus.Draft,
             Items = new List<InvoiceItem>
             {

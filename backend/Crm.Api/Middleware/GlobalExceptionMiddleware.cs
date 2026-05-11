@@ -33,11 +33,17 @@ public class GlobalExceptionMiddleware
     private static async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
         context.Response.ContentType = "application/json";
-        context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+        context.Response.StatusCode = exception switch
+        {
+            KeyNotFoundException => (int)HttpStatusCode.NotFound,
+            InvalidOperationException => (int)HttpStatusCode.BadRequest,
+            UnauthorizedAccessException => (int)HttpStatusCode.Forbidden,
+            _ => (int)HttpStatusCode.InternalServerError
+        };
 
         var response = new
         {
-            status = (int)HttpStatusCode.InternalServerError,
+            status = context.Response.StatusCode,
             message = exception.Message,
             type = exception.GetType().Name,
             detail = exception.StackTrace,
