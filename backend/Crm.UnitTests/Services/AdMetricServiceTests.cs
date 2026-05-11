@@ -97,7 +97,7 @@ public class AdMetricServiceTests
         { 
             new AdMetric { AdAccountId = account.Id, Spend = 50, Date = DateTime.UtcNow.Date } 
         };
-        _platformClientMock.Setup(c => c.FetchDailyMetricsAsync(account.ExternalAccountId, It.IsAny<DateTime>()))
+        _platformClientMock.Setup(c => c.FetchDailyMetricsAsync(account.ExternalAccountId, It.IsAny<DateTime>(), It.IsAny<string>()))
             .ReturnsAsync(fetchedMetrics);
 
         // Mock existing metrics to return empty list initially

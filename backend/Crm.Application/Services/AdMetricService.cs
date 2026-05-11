@@ -107,7 +107,7 @@ public class AdMetricService : IAdMetricService
             for (int i = 0; i <= 1; i++)
             {
                 var date = DateTime.UtcNow.AddDays(-i).Date;
-                var newMetrics = await client.FetchDailyMetricsAsync(account.ExternalAccountId, date);
+                var newMetrics = await client.FetchDailyMetricsAsync(account.ExternalAccountId, date, account.AccessToken ?? string.Empty);
 
                 foreach (var m in newMetrics)
                 {

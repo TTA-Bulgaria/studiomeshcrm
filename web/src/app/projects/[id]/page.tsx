@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/Table';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
+import { ExternalLink } from 'lucide-react';
 import { GanttChart } from '@/components/ui/GanttChart';
 import { toast } from 'sonner';
 
@@ -26,22 +27,19 @@ export default function ProjectDetailsPage() {
     isLoggingTime
   } = useTimeTracking(projectId);
   const { metrics, createMetric, isCreating: isLoggingMetric, analytics: projectAnalytics } = useAdMetrics(projectId);
-  // isLinking is required for the Link Account modal submit button loading state
-  const { accounts, linkAccount, unlinkAccount, sync, isSyncing, isLinking } = useAdAccounts(projectId);
+  const { accounts, unlinkAccount, sync, isSyncing } = useAdAccounts(projectId);
   
   const [activeTab, setActiveTab] = useState<'tasks' | 'timeline' | 'time' | 'ads' | 'team'>('tasks');
   const [isTimeModalOpen, setIsTimeModalOpen] = useState(false);
   const [isAdModalOpen, setIsAdModalOpen] = useState(false);
-  const [isLinkAccountModalOpen, setIsLinkAccountModalOpen] = useState(false);
-  
-  const [newTime, setNewTime] = useState({ 
+  const [newTime, setNewTime] = useState({
     hours: 1, 
     description: '', 
     taskId: '',
     date: new Date().toISOString().split('T')[0] 
   });
   const [newAd, setNewAd] = useState({ platform: AdPlatform.Google, spend: 0, impressions: 0, clicks: 0, conversions: 0, date: new Date().toISOString().split('T')[0] });
-  const [newAccount, setNewAccount] = useState({ platform: AdPlatform.Google, externalAccountId: '' });
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
   const project = projects.find(p => p.id === projectId);
 
@@ -104,15 +102,8 @@ export default function ProjectDetailsPage() {
     }
   };
 
-  const handleLinkAccount = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await linkAccount(newAccount);
-      setIsLinkAccountModalOpen(false);
-      toast.success('Ad account linked');
-    } catch {
-      toast.error('Failed to link account');
-    }
+  const handleConnectFacebook = () => {
+    window.location.href = `${API_URL}/api/facebook/oauth/connect?projectId=${projectId}`;
   };
 
   const handleSync = async () => {
@@ -295,7 +286,10 @@ export default function ProjectDetailsPage() {
                <h2 className="text-xl font-semibold text-rose-700">Ad Accounts</h2>
                <div className="flex gap-2">
                  <Button variant="outline" size="sm" onClick={handleSync} isLoading={isSyncing}>Sync Metrics</Button>
-                 <Button size="sm" onClick={() => setIsLinkAccountModalOpen(true)}>Link Account</Button>
+                 <Button size="sm" onClick={handleConnectFacebook} className="flex items-center gap-1.5">
+                   <ExternalLink className="w-3.5 h-3.5" />
+                   Connect Facebook Ads
+                 </Button>
                </div>
             </div>
             
@@ -395,28 +389,6 @@ export default function ProjectDetailsPage() {
          </form>
       </Modal>
 
-      {/* Link Ad Account Modal */}
-      <Modal isOpen={isLinkAccountModalOpen} onClose={() => setIsLinkAccountModalOpen(false)} title="Link External Ad Account">
-         <form onSubmit={handleLinkAccount} className="space-y-4">
-            <div className="space-y-2">
-                <label className="text-sm font-medium">Select Platform</label>
-                <select 
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    value={newAccount.platform}
-                    onChange={e => setNewAccount({ ...newAccount, platform: Number(e.target.value) as AdPlatform })}
-                    required
-                >
-                    <option value={AdPlatform.Google}>Google Ads</option>
-                    <option value={AdPlatform.Meta}>Meta Ads</option>
-                </select>
-            </div>
-            <Input label="Account ID" placeholder="e.g. act_123456789 or 123-456-7890" value={newAccount.externalAccountId} onChange={e => setNewAccount({ ...newAccount, externalAccountId: e.target.value })} required />
-            <p className="text-xs text-muted-foreground bg-blue-50 p-3 rounded border border-blue-100 italic">
-                Notice: For the MVP, we use stable stubs to simulate daily platform sync. Real OAuth2 flow will be enabled in Phase 4.
-            </p>
-            <Button type="submit" className="w-full" isLoading={isLinking}>Link & Initial Sync</Button>
-         </form>
-      </Modal>
     </Container>
   );
 }
