@@ -280,7 +280,6 @@ public class AuthService
         user.JobTitle = request.JobTitle;
         user.PhoneNumber = request.PhoneNumber;
         user.AvatarUrl = request.LogoUrl;
-        await _userRepository.UpdateAsync(user);
 
         tenant.Industry = request.Industry;
         tenant.CompanySize = request.CompanySize;
@@ -290,7 +289,10 @@ public class AuthService
         tenant.BrandColor = request.BrandColor;
         tenant.LogoUrl = request.LogoUrl;
         tenant.OnboardingCompleted = true;
-        await _tenantRepository.UpdateAsync(tenant);
+
+        // UpdateAsync on user triggers SaveChangesAsync — both user and tenant are tracked
+        // in the same DbContext so both are persisted in the same transaction.
+        await _userRepository.UpdateAsync(user);
 
         return true;
     }
