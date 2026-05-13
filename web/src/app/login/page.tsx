@@ -3,10 +3,11 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { api, isApiError } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/LayoutPrimitives';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Mail } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 
@@ -29,6 +30,9 @@ function LoginPageContent() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [emailNotVerified, setEmailNotVerified] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendSent, setResendSent] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Tracks whether a login() call is in flight. Used to prevent the
   // already-authenticated redirect effect from firing after login() sets user —
@@ -54,21 +58,35 @@ function LoginPageContent() {
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
+    setEmailNotVerified(false);
+    setResendSent(false);
     setIsSubmitting(true);
     setIsLoggingIn(true);
     try {
       await login(email, password, redirectTo);
     } catch (err) {
-      // Reset isLoggingIn so the already-authenticated guard is restored on failure.
       setIsLoggingIn(false);
-      // Show specific copy for rate-limiting, generic copy for everything else
-      if (err instanceof Error && err.message.includes('429')) {
+      if (isApiError(err) && err.status === 401 && err.message.toLowerCase().includes('verify')) {
+        setEmailNotVerified(true);
+      } else if (err instanceof Error && err.message.includes('429')) {
         setError(t('login.errors.rateLimit'));
       } else {
         setError(t('login.errors.invalid'));
       }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setResendLoading(true);
+    try {
+      await api.post('/api/auth/resend-verification', { email });
+      setResendSent(true);
+    } catch {
+      // silently ignore — user sees no change, can try again
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -135,6 +153,28 @@ function LoginPageContent() {
               </Link>
             </div>
 
+            {emailNotVerified && (
+              <div role="alert" className="p-4 rounded-lg bg-amber-50 border border-amber-200 space-y-2">
+                <div className="flex items-start gap-2">
+                  <Mail className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                  <p className="text-sm text-amber-800 font-medium">Please verify your email address</p>
+                </div>
+                <p className="text-xs text-amber-700 pl-6">Check your inbox for the verification link we sent when you registered.</p>
+                {resendSent ? (
+                  <p className="text-xs text-emerald-700 pl-6 font-medium">Verification email resent — check your inbox.</p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleResendVerification}
+                    disabled={resendLoading}
+                    className="text-xs text-amber-800 underline pl-6 hover:text-amber-900 disabled:opacity-50"
+                  >
+                    {resendLoading ? 'Sending…' : 'Resend verification email'}
+                  </button>
+                )}
+              </div>
+            )}
+
             {error && (
               <div
                 role="alert"
@@ -156,9 +196,9 @@ function LoginPageContent() {
           </form>
 
           <div className="mt-6 text-center text-sm text-muted-foreground">
-            Don&apos;t have an account?{' '}
+            {t('login.noAccount')}{' '}
             <Link href="/register" className="font-semibold text-primary hover:underline">
-              Create one
+              {t('login.createLink')}
             </Link>
           </div>
         </CardContent>

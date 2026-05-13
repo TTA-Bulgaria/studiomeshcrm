@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/LayoutPrimitives';
+import { SuccessState } from '@/components/ui/StateVisuals';
 import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 
@@ -32,6 +33,7 @@ export default function RegisterPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
   const { register } = useAuth();
   const { t } = useTranslation('auth');
 
@@ -75,6 +77,7 @@ export default function RegisterPage() {
     setIsSubmitting(true);
     try {
       await register(formData.email, formData.password, formData.fullName, formData.agencyName);
+      setRegisteredEmail(formData.email);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : t('register.errors.registrationFailed');
       setError(message);
@@ -82,6 +85,21 @@ export default function RegisterPage() {
       setIsSubmitting(false);
     }
   };
+
+  if (registeredEmail) {
+    return (
+      <div className="flex min-h-[calc(100vh-64px)] items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <SuccessState
+            title="Check your inbox"
+            description={`We've sent a verification link to ${registeredEmail}. Click it to activate your account, then sign in.`}
+            ctaLabel="Go to Sign In"
+            ctaHref="/login"
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-[calc(100vh-64px)] items-center justify-center p-6 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-50 via-slate-100 to-slate-200">

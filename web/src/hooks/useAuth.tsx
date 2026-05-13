@@ -1,12 +1,12 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { LoadingOverlay } from '@/components/ui/FailsafeProvider';
 
-const PUBLIC_PATHS = ['/login', '/signup', '/register', '/forgot-password'];
+const PUBLIC_PATHS = ['/login', '/signup', '/register', '/forgot-password', '/verify-email'];
 const PUBLIC_PREFIXES = ['/reset-password', '/portal'];
 
 export interface User {
@@ -16,7 +16,7 @@ export interface User {
   role: string;
   tenantId?: string;
   tenantSlug?: string;
-  isOnboarded?: boolean;
+  isOnboardingCompleted?: boolean;
 }
 
 interface AuthContextType {
@@ -33,7 +33,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
   const pathname = usePathname();
   const queryClient = useQueryClient();
 
@@ -64,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     setUser(data);
 
-    if (data.isOnboarded === false) {
+    if (data.isOnboardingCompleted === false) {
       window.location.href = '/onboarding';
       return;
     }
@@ -87,24 +86,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const register = async (email: string, password: string, fullName: string, agencyName: string) => {
-    const data = await api.post<any>('/api/auth/register', { email, password, fullName, agencyName });
-    if (data.accessToken) {
-      localStorage.setItem('access_token', data.accessToken);
-    }
-    setUser(data);
-
-    if (data.tenantSlug) {
-      const { hostname, protocol, port } = window.location;
-      if (hostname !== 'localhost') {
-        const parts = hostname.split('.');
-        const baseDomain = parts.length === 3 ? parts.slice(1).join('.') : hostname;
-        const portSuffix = port ? `:${port}` : '';
-        window.location.href = `${protocol}//${data.tenantSlug}.${baseDomain}${portSuffix}/onboarding`;
-        return;
-      }
-    }
-
-    window.location.href = '/onboarding';
+    await api.post<any>('/api/auth/register', { email, password, fullName, agencyName });
+    // Registration succeeds but email must be verified before login.
+    // The caller (register page) handles the success state.
   };
 
   const logout = async () => {
@@ -116,8 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem('access_token');
       setUser(null);
       queryClient.clear();
-      const { protocol } = window.location;
-      window.location.href = `${protocol}//app.studiomeshcrm.com/login`;
+      window.location.href = '/login';
     }
   };
 
