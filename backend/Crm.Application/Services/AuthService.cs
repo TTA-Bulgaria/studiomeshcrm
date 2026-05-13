@@ -55,7 +55,7 @@ public class AuthService
         };
 
         await _userRepository.AddAsync(user);
-        await SendVerificationEmailAsync(user);
+        try { await SendVerificationEmailAsync(user); } catch { /* email failure must not roll back a successful registration */ }
 
         return new AuthResponse
         {
@@ -144,7 +144,7 @@ public class AuthService
         var user = await _userRepository.GetByEmailAsync(email);
         if (user == null || user.IsEmailVerified) return;
 
-        await SendVerificationEmailAsync(user);
+        try { await SendVerificationEmailAsync(user); } catch { }
     }
 
     private async Task SendVerificationEmailAsync(User user)
