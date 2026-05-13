@@ -177,12 +177,16 @@ public class AuthService
         var appUrl = _configuration["FrontendUrl"] ?? _configuration["AppUrl"] ?? "https://app.studiomeshcrm.com";
         var resetLink = $"{appUrl}/reset-password/{token}";
 
-        await _emailService.SendTemplatedEmailAsync(
-            user.Email,
-            "Reset your password — Studio Mesh CRM",
-            "PasswordReset",
-            new PasswordResetModel(user.FullName, resetLink)
-        );
+        try
+        {
+            await _emailService.SendTemplatedEmailAsync(
+                user.Email,
+                "Reset your password — Studio Mesh CRM",
+                "PasswordReset",
+                new PasswordResetModel(user.FullName, resetLink)
+            );
+        }
+        catch { /* email failure must not prevent the reset token from being saved */ }
     }
 
     public async Task<bool> ResetPasswordAsync(string token, string newPassword)
