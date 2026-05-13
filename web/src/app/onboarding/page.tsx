@@ -18,7 +18,7 @@ export default function OnboardingPage() {
 
   // Redirect away if the user has already completed onboarding.
   useEffect(() => {
-    if (user?.isOnboarded) {
+    if (user?.isOnboardingCompleted) {
       router.replace('/dashboard');
     }
   }, [user, router]);

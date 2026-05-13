@@ -73,7 +73,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> VerifyEmail([FromQuery] string token)
     {
         var success = await _authService.VerifyEmailAsync(token);
-        if (!success) return BadRequest(new { Message = "Invalid or already used verification link." });
+        if (!success) return NotFound(new { Message = "Invalid or already used verification link." });
         return Ok(new { Message = "Email verified successfully. You can now sign in." });
     }
 
