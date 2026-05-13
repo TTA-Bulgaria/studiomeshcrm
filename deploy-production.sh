@@ -15,6 +15,13 @@ echo "==> [Production] Building backend..."
 cd $PROD/backend
 dotnet publish -c Release -o "$API_OUT"
 
+echo "==> [Production] Running database migrations..."
+DATABASE_URL=$(sudo systemctl show crmapi.service -p Environment --value | grep -oP 'DATABASE_URL=\K[^ ]+')
+DATABASE_URL="$DATABASE_URL" ASPNETCORE_ENVIRONMENT=Production \
+  dotnet ef database update \
+    --project Crm.Infrastructure/Crm.Infrastructure.csproj \
+    --startup-project Crm.Api/Crm.Api.csproj
+
 echo "==> [Production] Restarting backend..."
 sudo systemctl restart crmapi.service
 
