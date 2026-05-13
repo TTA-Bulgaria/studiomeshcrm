@@ -20,7 +20,7 @@ sudo systemctl restart crmapi.service
 
 echo "==> [Production] Building frontend..."
 cd $WEB
-npm ci --omit=dev
+npm ci
 npm run build
 
 echo "==> [Production] Copying static assets..."

@@ -20,7 +20,7 @@ sudo systemctl restart crmapi-staging.service
 
 echo "==> [Staging] Building frontend..."
 cd $WEB
-npm ci --omit=dev
+npm ci
 npm run build
 
 echo "==> [Staging] Copying static assets..."
