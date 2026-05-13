@@ -16,7 +16,7 @@ cd $PROD/backend
 dotnet publish -c Release -o "$API_OUT"
 
 echo "==> [Production] Running database migrations..."
-DATABASE_URL=$(sudo systemctl show crmapi.service -p Environment --value | grep -oP 'DATABASE_URL=\K[^ ]+')
+DATABASE_URL=$(sudo grep -oP 'DATABASE_URL=\K.*' /etc/systemd/system/crmapi.service)
 DATABASE_URL="$DATABASE_URL" ASPNETCORE_ENVIRONMENT=Production \
   dotnet ef database update \
     --project Crm.Infrastructure/Crm.Infrastructure.csproj \

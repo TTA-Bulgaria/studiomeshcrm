@@ -16,7 +16,7 @@ cd $STAGING/backend
 dotnet publish Crm.Api/Crm.Api.csproj -c Release -o "$API_OUT"
 
 echo "==> [Staging] Running database migrations..."
-DATABASE_URL=$(sudo systemctl show crmapi-staging.service -p Environment --value | grep -oP 'DATABASE_URL=\K[^ ]+')
+DATABASE_URL=$(sudo grep -oP 'DATABASE_URL=\K.*' /etc/systemd/system/crmapi-staging.service)
 DATABASE_URL="$DATABASE_URL" ASPNETCORE_ENVIRONMENT=Staging \
   dotnet ef database update \
     --project Crm.Infrastructure/Crm.Infrastructure.csproj \
