@@ -37,6 +37,7 @@ public class AuthServiceTests
         jwtSectionMock.Setup(s => s["Audience"]).Returns("agency_crm");
 
         _configurationMock.Setup(c => c.GetSection("Jwt")).Returns(jwtSectionMock.Object);
+        _configurationMock.Setup(c => c["FrontendUrl"]).Returns("https://app.studiomeshcrm.com");
 
         _service = new AuthService(
             _userRepositoryMock.Object,
@@ -315,7 +316,8 @@ public class AuthServiceTests
         user.JobTitle.Should().Be(request.JobTitle);
         tenant.Industry.Should().Be(request.Industry);
         tenant.OnboardingCompleted.Should().BeTrue();
+        // Tenant is saved via EF change tracking when userRepository.UpdateAsync triggers SaveChangesAsync —
+        // tenantRepository.UpdateAsync is intentionally not called.
         _userRepositoryMock.Verify(r => r.UpdateAsync(user), Times.Once);
-        _tenantRepositoryMock.Verify(r => r.UpdateAsync(tenant), Times.Once);
     }
 }

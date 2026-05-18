@@ -54,8 +54,12 @@ public class AdMetricServiceTests
     {
         // Arrange
         var projectId = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        _currentUserContextMock.Setup(c => c.TenantId).Returns(tenantId);
+
         var metrics = _fixture.Build<AdMetric>()
             .With(m => m.ProjectId, projectId)
+            .With(m => m.TenantId, tenantId)
             .With(m => m.Spend, 100)
             .CreateMany(2)
             .ToList();
@@ -65,11 +69,13 @@ public class AdMetricServiceTests
 
         var contracts = _fixture.Build<Contract>()
             .With(c => c.ProjectId, projectId)
+            .With(c => c.TenantId, tenantId)
             .With(c => c.Status, ContractStatus.Signed)
             .With(c => c.TotalAmount, 500)
             .CreateMany(1)
             .ToList();
-        _contractRepositoryMock.Setup(r => r.GetAllAsync()).ReturnsAsync(contracts);
+        // Service uses AsQueryable().Where().ToListAsync() — must use async-compatible mock
+        _contractRepositoryMock.Setup(r => r.AsQueryable()).Returns(contracts.AsQueryable().BuildMock());
 
         // Act
         var result = await _service.GetProjectAnalyticsAsync(projectId);
@@ -86,17 +92,21 @@ public class AdMetricServiceTests
         // Arrange
         var projectId = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
-        var account = new ProjectAdAccount 
-        { 
-            Id = Guid.NewGuid(), 
-            ProjectId = projectId, 
-            IsActive = true, 
-            Platform = AdPlatform.Google, 
+        _currentUserContextMock.Setup(c => c.TenantId).Returns(tenantId);
+
+        var account = new ProjectAdAccount
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = projectId,
+            IsActive = true,
+            Platform = AdPlatform.Google,
             ExternalAccountId = "EXT123",
             TenantId = tenantId
         };
-        
-        _adAccountRepositoryMock.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<ProjectAdAccount> { account });
+
+        // Service uses AsQueryable().Where().ToListAsync() — must use async-compatible mock
+        _adAccountRepositoryMock.Setup(r => r.AsQueryable())
+            .Returns(new List<ProjectAdAccount> { account }.AsQueryable().BuildMock());
 
         var fetchedMetrics = new List<AdMetric> 
         { 
@@ -105,8 +115,9 @@ public class AdMetricServiceTests
         _platformClientMock.Setup(c => c.FetchDailyMetricsAsync(account.ExternalAccountId, It.IsAny<DateTime>(), It.IsAny<string>()))
             .ReturnsAsync(fetchedMetrics);
 
-        // Mock existing metrics to return empty list initially
-        _repositoryMock.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<AdMetric>());
+        // Service calls AsQueryable().FirstOrDefaultAsync() inside the sync loop to detect duplicates
+        _repositoryMock.Setup(r => r.AsQueryable())
+            .Returns(new List<AdMetric>().AsQueryable().BuildMock());
 
         // Act
         await _service.SyncMetricsAsync(projectId);
@@ -123,6 +134,10 @@ public class AdMetricServiceTests
         var tenantId = Guid.NewGuid();
         var request = _fixture.Create<CreateAdMetricRequest>();
         _currentUserContextMock.Setup(c => c.TenantId).Returns(tenantId);
+
+        // Service checks that the project exists and belongs to the current tenant
+        var project = new Project { Id = request.ProjectId, TenantId = tenantId };
+        _projectRepositoryMock.Setup(r => r.GetByIdAsync(request.ProjectId)).ReturnsAsync(project);
 
         // Act
         var result = await _service.CreateAsync(request);

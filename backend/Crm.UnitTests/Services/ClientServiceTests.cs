@@ -6,6 +6,7 @@ using Crm.Application.DTOs.Clients;
 using Xunit;
 using AutoFixture;
 using FluentAssertions;
+using MockQueryable.Moq;
 
 namespace Crm.UnitTests.Services;
 
@@ -50,7 +51,8 @@ public class ClientServiceTests
     {
         // Arrange
         var clients = _fixture.CreateMany<Client>(3).ToList();
-        _repositoryMock.Setup(r => r.GetAllAsync()).ReturnsAsync(clients);
+        // Service calls AsQueryable().Include().ToListAsync() — must use async-compatible mock
+        _repositoryMock.Setup(r => r.AsQueryable()).Returns(clients.AsQueryable().BuildMock());
 
         // Act
         var result = await _service.GetAllAsync();
@@ -59,7 +61,6 @@ public class ClientServiceTests
         result.Should().NotBeNull();
         result.Should().HaveCount(3);
         result.First().Name.Should().Be(clients.First().Name);
-        _repositoryMock.Verify(r => r.GetAllAsync(), Times.Once);
     }
 
     [Fact]
