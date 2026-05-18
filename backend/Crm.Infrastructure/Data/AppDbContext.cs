@@ -35,6 +35,7 @@ public class AppDbContext : DbContext, IUnitOfWork
     public DbSet<ProjectAdAccount> ProjectAdAccounts => Set<ProjectAdAccount>();
     public DbSet<TaskTemplate> TaskTemplates => Set<TaskTemplate>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<FacebookOAuthSession> FacebookOAuthSessions => Set<FacebookOAuthSession>();
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -123,6 +124,9 @@ public class AppDbContext : DbContext, IUnitOfWork
             .WithMany(pa => pa.Metrics)
             .HasForeignKey(am => am.AdAccountId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<FacebookOAuthSession>()
+            .HasKey(s => s.Key);
     }
 
     private void ApplyTenantFilter<T>(ModelBuilder modelBuilder) where T : class, ITenantedEntity

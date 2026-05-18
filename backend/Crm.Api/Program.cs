@@ -1,8 +1,11 @@
 using System;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Crm.Infrastructure.Data;
 using Crm.Application.Interfaces;
@@ -63,6 +66,39 @@ Log.Information("🌐 Allowed CORS Origins: {Origins}", string.Join(", ", allowe
 
 builder.Services.AddControllers();
 
+// Rate limiting policies
+builder.Services.AddRateLimiter(options =>
+{
+    // Facebook OAuth — 10 initiations per minute per IP
+    options.AddFixedWindowLimiter("facebook-oauth", limiterOptions =>
+    {
+        limiterOptions.PermitLimit = 10;
+        limiterOptions.Window = TimeSpan.FromMinutes(1);
+        limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        limiterOptions.QueueLimit = 0;
+    });
+
+    // Login — 5 attempts per minute per IP
+    options.AddFixedWindowLimiter("auth-login", limiterOptions =>
+    {
+        limiterOptions.PermitLimit = 5;
+        limiterOptions.Window = TimeSpan.FromMinutes(1);
+        limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        limiterOptions.QueueLimit = 0;
+    });
+
+    // Forgot-password, reset-password, resend-verification — 3 per hour per IP
+    options.AddFixedWindowLimiter("auth-sensitive", limiterOptions =>
+    {
+        limiterOptions.PermitLimit = 3;
+        limiterOptions.Window = TimeSpan.FromHours(1);
+        limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        limiterOptions.QueueLimit = 0;
+    });
+
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
+
 // CORS Configuration
 builder.Services.AddCors(options =>
 {
@@ -118,6 +154,11 @@ builder.Services.AddScoped<IAdPlatformClient>(sp => sp.GetRequiredService<MetaAd
 
 // Notifications
 builder.Services.AddHttpClient<ISlackService, SlackService>();
+builder.Services.AddHttpClient(); // IHttpClientFactory for FacebookOAuthController
+builder.Services.AddDataProtection().SetApplicationName("AgencyCrm");
+builder.Services.AddScoped<Crm.Application.Interfaces.ITokenEncryptionService, Crm.Infrastructure.Services.TokenEncryptionService>();
+
+builder.Services.AddScoped<IEmailTemplateRenderer, EmailTemplateRenderer>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ISlackService, SlackService>();
 
@@ -185,11 +226,23 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Configure Forwarded Headers for Railway Proxy
-app.UseForwardedHeaders(new ForwardedHeadersOptions
+// Configure Forwarded Headers — only trust XFF from explicitly known proxies.
+// KnownNetworks/KnownProxies are cleared so arbitrary clients cannot spoof X-Forwarded-For.
+// Set KNOWN_PROXY_IP env var to your reverse-proxy IP in production.
+var forwardedOptions = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-});
+};
+forwardedOptions.KnownNetworks.Clear();
+forwardedOptions.KnownProxies.Clear();
+
+var knownProxyIp = Environment.GetEnvironmentVariable("KNOWN_PROXY_IP");
+if (!string.IsNullOrEmpty(knownProxyIp) && System.Net.IPAddress.TryParse(knownProxyIp, out var proxyIp))
+    forwardedOptions.KnownProxies.Add(proxyIp);
+else
+    forwardedOptions.KnownProxies.Add(System.Net.IPAddress.Loopback); // localhost only in dev
+
+app.UseForwardedHeaders(forwardedOptions);
 
 // Seed Database (Always runs if database is empty, even in Production)
 try 
@@ -264,6 +317,7 @@ app.UseCors("DefaultPolicy");
 // Global Exception Handling (RFC 7807)
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
+app.UseRateLimiter();
 app.UseMiddleware<TenantResolutionMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();

@@ -61,9 +61,10 @@ if (!i18n.isInitialized) {
       supportedLngs: ['en', 'bg'],
       defaultNS: 'common',
       detection: {
-        order: ['localStorage', 'navigator'],
+        order: ['querystring', 'localStorage', 'navigator'],
         caches: ['localStorage'],
         lookupLocalStorage: 'agenccy_lang',
+        lookupQuerystring: 'lng',
       },
       interpolation: {
         escapeValue: false, // React already escapes values

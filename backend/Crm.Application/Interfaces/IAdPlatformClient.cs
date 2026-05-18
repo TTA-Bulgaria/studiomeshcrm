@@ -5,5 +5,5 @@ namespace Crm.Application.Interfaces;
 public interface IAdPlatformClient
 {
     AdPlatform Platform { get; }
-    Task<IEnumerable<AdMetric>> FetchDailyMetricsAsync(string externalAccountId, DateTime date);
+    Task<IEnumerable<AdMetric>> FetchDailyMetricsAsync(string externalAccountId, DateTime date, string accessToken);
 }

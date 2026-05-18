@@ -32,15 +32,21 @@ public class UserRepository : IUserRepository
 
     public async Task<User?> GetByRefreshTokenAsync(string token)
     {
-        return await _context.Users
+        return await _context.Users.IgnoreQueryFilters()
             .Include(u => u.RefreshTokens)
             .FirstOrDefaultAsync(u => u.RefreshTokens.Any(t => t.Token == token));
     }
 
     public async Task<User?> GetByResetTokenAsync(string tokenHash)
     {
-        return await _context.Users
+        return await _context.Users.IgnoreQueryFilters()
             .FirstOrDefaultAsync(u => u.PasswordResetToken == tokenHash);
+    }
+
+    public async Task<User?> GetByEmailVerificationTokenAsync(string token)
+    {
+        return await _context.Users.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.EmailVerificationToken == token);
     }
 
     public async Task AddAsync(User user)

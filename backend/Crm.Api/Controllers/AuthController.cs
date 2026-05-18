@@ -3,6 +3,7 @@ using Crm.Application.Services;
 using Crm.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Crm.Api.Controllers;
 
@@ -24,19 +25,29 @@ public class AuthController : ControllerBase
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting("auth-login")]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        _logger.LogInformation("Login attempt for user: {Email}", request.Email);
-        var (response, accessToken, refreshToken) = await _authService.LoginAsync(request, GetIpAddress());
+        _logger.LogInformation("Login attempt received");
+        (AuthResponse? response, string? accessToken, string? refreshToken) result;
+        try
+        {
+            result = await _authService.LoginAsync(request, GetIpAddress());
+        }
+        catch (InvalidOperationException ex) when (ex.Message == "EMAIL_NOT_VERIFIED")
+        {
+            return Unauthorized(new { Message = "Please verify your email before signing in. Check your inbox for the verification link.", Code = "EMAIL_NOT_VERIFIED" });
+        }
 
+        var (response, accessToken, refreshToken) = result;
         if (response == null)
         {
-            _logger.LogWarning("Failed login attempt for user: {Email}", request.Email);
+            _logger.LogWarning("Authentication failed for login attempt");
             return Unauthorized(new { Message = "Invalid email or password." });
         }
 
-        _logger.LogInformation("User {Email} logged in successfully", request.Email);
+        _logger.LogInformation("User {UserId} logged in successfully", response.Id);
         SetTokenCookie("refresh_token", refreshToken!);
         SetTokenCookie("access_token", accessToken!);
 
@@ -48,7 +59,7 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
-        _logger.LogInformation("Registration attempt for email: {Email}, Agency: {Agency}", request.Email, request.AgencyName);
+        _logger.LogInformation("Registration attempt received");
         var response = await _authService.RegisterAsync(request);
 
         if (response == null)
@@ -56,14 +67,25 @@ public class AuthController : ControllerBase
             return BadRequest(new { Message = "User with this email already exists." });
         }
 
-        // Auto-login after registration
-        var (loggedResponse, accessToken, refreshToken) = await _authService.LoginAsync(new LoginRequest { Email = request.Email, Password = request.Password }, GetIpAddress());
-        
-        SetTokenCookie("refresh_token", refreshToken!);
-        SetTokenCookie("access_token", accessToken!);
+        return Ok(new { Message = "Registration successful. Please check your email to verify your account before signing in." });
+    }
 
-        loggedResponse!.AccessToken = accessToken!;
-        return Ok(loggedResponse);
+    [AllowAnonymous]
+    [HttpGet("verify-email")]
+    public async Task<IActionResult> VerifyEmail([FromQuery] string token)
+    {
+        var success = await _authService.VerifyEmailAsync(token);
+        if (!success) return NotFound(new { Message = "Invalid or already used verification link." });
+        return Ok(new { Message = "Email verified successfully. You can now sign in." });
+    }
+
+    [AllowAnonymous]
+    [EnableRateLimiting("auth-sensitive")]
+    [HttpPost("resend-verification")]
+    public async Task<IActionResult> ResendVerification([FromBody] ForgotPasswordRequest request)
+    {
+        await _authService.ResendVerificationEmailAsync(request.Email);
+        return Ok(new { Message = "If that email is registered and unverified, a new link has been sent." });
     }
 
     [HttpPost("refresh")]
@@ -83,7 +105,6 @@ public class AuthController : ControllerBase
         return Ok(response);
     }
 
-
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()
     {
@@ -98,7 +119,7 @@ public class AuthController : ControllerBase
             Domain = _env.IsDevelopment() ? null : ".studiomeshcrm.com",
             Path = "/",
             Secure = !_env.IsDevelopment(),
-            SameSite = _env.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.None,
+            SameSite = _env.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.Strict,
         };
         Response.Cookies.Delete("access_token", deleteOptions);
         Response.Cookies.Delete("refresh_token", deleteOptions);
@@ -120,22 +141,25 @@ public class AuthController : ControllerBase
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting("auth-sensitive")]
     [HttpPost("forgot-password")]
-    public async Task<IActionResult> ForgotPassword([FromBody] string email)
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
     {
-        await _authService.ForgotPasswordAsync(email);
+        await _authService.ForgotPasswordAsync(request.Email);
         return Ok(new { Message = "If an account exists with that email, a reset link has been sent." });
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting("auth-sensitive")]
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
     {
-        var success = await _authService.ResetPasswordAsync(request.Token, request.Password);
+        var success = await _authService.ResetPasswordAsync(request.Token, request.NewPassword);
         if (!success) return BadRequest(new { Message = "Invalid or expired token." });
         return Ok(new { Message = "Password has been reset successfully." });
     }
-    [Authorize]
+
+    [Authorize]
     [HttpPost("onboarding/complete")]
     public async Task<IActionResult> CompleteOnboarding([FromBody] OnboardingRequest request)
     {
@@ -147,6 +171,7 @@ public class AuthController : ControllerBase
 
         return Ok(new { Message = "Onboarding completed successfully." });
     }
+
     [Authorize]
     [HttpPost("change-password")]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
@@ -167,18 +192,13 @@ public class AuthController : ControllerBase
             HttpOnly = true,
             Expires = name == "refresh_token" ? DateTime.UtcNow.AddDays(7) : DateTime.UtcNow.AddMinutes(15),
             Secure = !_env.IsDevelopment(),
-            SameSite = _env.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.None,
-            Domain = _env.IsDevelopment() ? null : ".studiomeshcrm.com", // Share cookies across all subdomains
+            SameSite = _env.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.Strict,
+            Domain = _env.IsDevelopment() ? null : ".studiomeshcrm.com",
             Path = "/"
         };
         Response.Cookies.Append(name, token, cookieOptions);
     }
 
-    private string GetIpAddress()
-    {
-        if (Request.Headers.ContainsKey("X-Forwarded-For"))
-            return Request.Headers["X-Forwarded-For"]!;
-        else
-            return HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "N/A";
-    }
+    private string GetIpAddress() =>
+        HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "N/A";
 }

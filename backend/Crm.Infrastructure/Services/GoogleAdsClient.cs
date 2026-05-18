@@ -18,7 +18,7 @@ public class GoogleAdsClient : IAdPlatformClient
 
     public AdPlatform Platform => AdPlatform.Google;
 
-    public async Task<IEnumerable<AdMetric>> FetchDailyMetricsAsync(string externalAccountId, DateTime date)
+    public async Task<IEnumerable<AdMetric>> FetchDailyMetricsAsync(string externalAccountId, DateTime date, string accessToken)
     {
         var developerToken = _configuration["GoogleAds:DeveloperToken"];
         var customerId = externalAccountId.Replace("-", "");

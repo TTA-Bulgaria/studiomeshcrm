@@ -3,7 +3,7 @@ import axios from 'axios';
 
 // Public API client for portal (doesn't need JWT in header as it uses Token in URL)
 const portalApi = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL + '/portal',
+  baseURL: (process.env.NEXT_PUBLIC_API_URL ?? '') + '/portal',
 });
 
 export interface PortalContract {

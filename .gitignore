@@ -1,5 +1,8 @@
 # .gitignore for Agency CRM (Root)
 
+# --- Claude Code local settings (contains internal tool permissions, not for VCS) ---
+.claude/settings.local.json
+
 # --- Environment ---
 .env
 .env.local

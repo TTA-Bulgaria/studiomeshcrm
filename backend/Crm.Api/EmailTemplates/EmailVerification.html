@@ -1,0 +1,9 @@
+<h1>Verify your email address</h1>
+<p>Hi {{ fullname }},</p>
+<p>Welcome to Studio Mesh CRM. Before you can sign in, we need to confirm this email address belongs to you.</p>
+<p style="text-align:center">
+  <a href="{{ verificationlink }}" class="btn">Verify Email Address</a>
+</p>
+<hr class="divider" />
+<div class="notice">This link expires in <strong>24 hours</strong>. After that you can request a new one from the login page.</div>
+<p class="link-fallback">If the button doesn't work, copy and paste this link into your browser:<br />{{ verificationlink }}</p>

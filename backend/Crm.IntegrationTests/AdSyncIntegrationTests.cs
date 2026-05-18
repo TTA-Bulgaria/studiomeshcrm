@@ -86,7 +86,7 @@ public class AdSyncIntegrationTests : IClassFixture<CrmWebApplicationFactory>, I
 
         // 2. Mock external platform response
         var yesterday = DateTime.UtcNow.AddDays(-1).Date;
-        _googleMock.Setup(x => x.FetchDailyMetricsAsync("acc_123", It.IsAny<DateTime>()))
+        _googleMock.Setup(x => x.FetchDailyMetricsAsync("acc_123", It.IsAny<DateTime>(), It.IsAny<string>()))
             .ReturnsAsync(new List<AdMetric> 
             { 
                 new AdMetric { Spend = 150, Impressions = 1000, Clicks = 50, Conversions = 5, Date = yesterday } 

@@ -132,8 +132,15 @@ namespace Crm.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("TEXT");
@@ -287,6 +294,37 @@ namespace Crm.Infrastructure.Migrations
                     b.HasIndex("ProjectId");
 
                     b.ToTable("Tasks");
+                });
+
+            modelBuilder.Entity("Crm.Domain.Entities.FacebookOAuthSession", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AdAccountsJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LongLivedToken")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Phase")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("TokenExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("FacebookOAuthSessions");
                 });
 
             modelBuilder.Entity("Crm.Domain.Entities.Invoice", b =>
@@ -653,6 +691,9 @@ namespace Crm.Infrastructure.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("TokenExpiresAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("TEXT");
 
@@ -786,6 +827,15 @@ namespace Crm.Infrastructure.Migrations
                     b.Property<string>("BillingEmail")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("BrandColor")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BusinessAddress")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CompanySize")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
@@ -796,6 +846,9 @@ namespace Crm.Infrastructure.Migrations
                     b.Property<int>("DefaultPaymentTermsDays")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Industry")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("LogoUrl")
                         .HasColumnType("TEXT");
 
@@ -803,8 +856,14 @@ namespace Crm.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("OnboardingCompleted")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Slug")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("TargetMonthlyRevenue")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("TaxId")
@@ -814,6 +873,9 @@ namespace Crm.Infrastructure.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Website")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
@@ -872,6 +934,9 @@ namespace Crm.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("AvatarUrl")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
@@ -879,11 +944,20 @@ namespace Crm.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("EmailVerificationToken")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("FullName")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<decimal>("HourlyRate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsEmailVerified")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("JobTitle")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("PasswordHash")
@@ -894,6 +968,9 @@ namespace Crm.Infrastructure.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("PasswordResetTokenExpiry")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PhoneNumber")
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Role")

@@ -24,6 +24,7 @@ const PUBLIC_PREFIXES = [
   '/portal',
   '/forgot-password',
   '/reset-password',
+  '/verify-email',
 ];
 
 // Exact public paths (not prefix-matched to avoid accidental catch-all)

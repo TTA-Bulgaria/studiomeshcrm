@@ -4,6 +4,7 @@ using System.Text;
 using Crm.Domain.Entities;
 using Crm.Application.Interfaces;
 using Crm.Application.DTOs.Auth;
+using Crm.Application.Email;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
@@ -17,13 +18,20 @@ public class AuthService
     private readonly IGenericRepository<Tenant> _tenantRepository;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AuthService> _logger;
+    private readonly IEmailService _emailService;
 
-    public AuthService(IUserRepository userRepository, IGenericRepository<Tenant> tenantRepository, IConfiguration configuration, ILogger<AuthService> logger)
+    public AuthService(
+        IUserRepository userRepository,
+        IGenericRepository<Tenant> tenantRepository,
+        IConfiguration configuration,
+        ILogger<AuthService> logger,
+        IEmailService emailService)
     {
         _userRepository = userRepository;
         _tenantRepository = tenantRepository;
         _configuration = configuration;
         _logger = logger;
+        _emailService = emailService;
     }
 
     public async Task<AuthResponse?> RegisterAsync(RegisterRequest request)
@@ -31,13 +39,11 @@ public class AuthService
         var existingUser = await _userRepository.GetByEmailAsync(request.Email);
         if (existingUser != null) return null;
 
-        // 1. Create Tenant
         var slug = System.Text.RegularExpressions.Regex.Replace(
             request.AgencyName.ToLowerInvariant().Trim(), @"[^a-z0-9]+", "-").Trim('-');
         var tenant = new Tenant { Name = request.AgencyName, Slug = slug };
         await _tenantRepository.AddAsync(tenant);
 
-        // 2. Create User as Admin of that tenant
         var user = new User
         {
             Email = request.Email,
@@ -45,10 +51,11 @@ public class AuthService
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             Role = UserRole.Admin,
             TenantId = tenant.Id,
-            HourlyRate = 0 // Default
+            HourlyRate = 0
         };
 
         await _userRepository.AddAsync(user);
+        try { await SendVerificationEmailAsync(user); } catch { /* email failure must not roll back a successful registration */ }
 
         return new AuthResponse
         {
@@ -57,7 +64,8 @@ public class AuthService
             FullName = user.FullName,
             Role = user.Role.ToString(),
             TenantId = user.TenantId,
-            TenantSlug = tenant.Slug
+            TenantSlug = tenant.Slug,
+            IsOnboardingCompleted = false
         };
     }
 
@@ -73,57 +81,15 @@ public class AuthService
             FullName = user.FullName,
             Role = user.Role.ToString(),
             TenantId = user.TenantId,
-            TenantSlug = user.Tenant?.Slug ?? string.Empty
+            TenantSlug = user.Tenant?.Slug ?? string.Empty,
+            IsOnboardingCompleted = user.Tenant?.OnboardingCompleted ?? false,
+            AvatarUrl = user.AvatarUrl,
+            JobTitle = user.JobTitle,
+            PhoneNumber = user.PhoneNumber,
+            HourlyRate = user.HourlyRate,
+            BrandColor = user.Tenant?.BrandColor,
+            LogoUrl = user.Tenant?.LogoUrl
         };
-    }
-
-    public async Task<bool> ForgotPasswordAsync(string email)
-    {
-        var user = await _userRepository.GetByEmailAsync(email);
-        if (user == null) return true; // Prevent email enumeration
-
-        // Generate a cryptographically secure random token
-        var rawToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
-        // Store the SHA-256 hash (never store the raw token)
-        using var sha256 = SHA256.Create();
-        var tokenHash = Convert.ToHexString(sha256.ComputeHash(Encoding.UTF8.GetBytes(rawToken)));
-
-        user.PasswordResetToken = tokenHash;
-        user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1);
-        await _userRepository.UpdateAsync(user);
-
-        var frontendBase = _configuration["FrontendBaseUrl"] ?? "http://localhost:3000";
-        var resetLink = $"{frontendBase}/reset-password/{rawToken}";
-
-        // TODO: send email via IEmailService when available
-        _logger.LogInformation("Password reset link for {Email}: {Link}", user.Email, resetLink);
-
-        return true;
-    }
-
-    public async Task<bool> ResetPasswordAsync(string token, string newPassword)
-    {
-        using var sha256 = SHA256.Create();
-        var tokenHash = Convert.ToHexString(sha256.ComputeHash(Encoding.UTF8.GetBytes(token)));
-
-        var user = await _userRepository.GetByResetTokenAsync(tokenHash);
-        if (user == null || user.PasswordResetTokenExpiry < DateTime.UtcNow) return false;
-
-        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
-        user.PasswordResetToken = null;
-        user.PasswordResetTokenExpiry = null;
-        await _userRepository.UpdateAsync(user);
-        return true;
-    }
-
-    public async Task<bool> ChangePasswordAsync(Guid userId, string currentPassword, string newPassword)
-    {
-        var user = await _userRepository.GetByIdAsync(userId);
-        if (user == null || !BCrypt.Net.BCrypt.Verify(currentPassword, user.PasswordHash)) return false;
-
-        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
-        await _userRepository.UpdateAsync(user);
-        return true;
     }
 
     public async Task<(AuthResponse? Response, string? AccessToken, string? RefreshToken)> LoginAsync(LoginRequest request, string ipAddress)
@@ -131,9 +97,10 @@ public class AuthService
         var user = await _userRepository.GetByEmailAsync(request.Email);
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-        {
             return (null, null, null);
-        }
+
+        if (!user.IsEmailVerified)
+            throw new InvalidOperationException("EMAIL_NOT_VERIFIED");
 
         var accessToken = GenerateJwtToken(user);
         var refreshToken = GenerateRefreshToken(ipAddress, user.Id);
@@ -148,10 +115,118 @@ public class AuthService
             FullName = user.FullName,
             Role = user.Role.ToString(),
             TenantId = user.TenantId,
-            TenantSlug = user.Tenant?.Slug ?? string.Empty
+            TenantSlug = user.Tenant?.Slug ?? string.Empty,
+            IsOnboardingCompleted = user.Tenant?.OnboardingCompleted ?? false,
+            AvatarUrl = user.AvatarUrl,
+            JobTitle = user.JobTitle,
+            PhoneNumber = user.PhoneNumber,
+            HourlyRate = user.HourlyRate,
+            BrandColor = user.Tenant?.BrandColor,
+            LogoUrl = user.Tenant?.LogoUrl
         };
 
         return (response, accessToken, refreshToken.Token);
+    }
+
+    public async Task<bool> VerifyEmailAsync(string token)
+    {
+        var user = await _userRepository.GetByEmailVerificationTokenAsync(token);
+        if (user == null || user.IsEmailVerified) return false;
+
+        user.IsEmailVerified = true;
+        user.EmailVerificationToken = null;
+        await _userRepository.UpdateAsync(user);
+        return true;
+    }
+
+    public async Task ResendVerificationEmailAsync(string email)
+    {
+        var user = await _userRepository.GetByEmailAsync(email);
+        if (user == null || user.IsEmailVerified) return;
+
+        try { await SendVerificationEmailAsync(user); } catch { }
+    }
+
+    private async Task SendVerificationEmailAsync(User user)
+    {
+        var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        user.EmailVerificationToken = token;
+        await _userRepository.UpdateAsync(user);
+
+        var appUrl = _configuration["FrontendUrl"] ?? _configuration["AppUrl"]
+            ?? throw new InvalidOperationException("FrontendUrl is not configured. Set FrontendUrl or AppUrl in application configuration.");
+        var verificationLink = $"{appUrl}/verify-email?token={token}";
+
+        await _emailService.SendTemplatedEmailAsync(
+            user.Email,
+            "Verify your email address — Studio Mesh CRM",
+            "EmailVerification",
+            new EmailVerificationModel(user.FullName, verificationLink)
+        );
+    }
+
+    public async Task ForgotPasswordAsync(string email)
+    {
+        var user = await _userRepository.GetByEmailAsync(email);
+        if (user == null) return;
+
+        var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        user.PasswordResetToken = token;
+        user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1);
+        await _userRepository.UpdateAsync(user);
+
+        var appUrl = _configuration["FrontendUrl"] ?? _configuration["AppUrl"]
+            ?? throw new InvalidOperationException("FrontendUrl is not configured. Set FrontendUrl or AppUrl in application configuration.");
+        var resetLink = $"{appUrl}/reset-password/{token}";
+
+        try
+        {
+            await _emailService.SendTemplatedEmailAsync(
+                user.Email,
+                "Reset your password — Studio Mesh CRM",
+                "PasswordReset",
+                new PasswordResetModel(user.FullName, resetLink)
+            );
+        }
+        catch { /* email failure must not prevent the reset token from being saved */ }
+    }
+
+    public async Task<bool> ResetPasswordAsync(string token, string newPassword)
+    {
+        var user = await _userRepository.GetByResetTokenAsync(token);
+        if (user == null || user.PasswordResetTokenExpiry < DateTime.UtcNow)
+            return false;
+
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+        user.PasswordResetToken = null;
+        user.PasswordResetTokenExpiry = null;
+        await _userRepository.UpdateAsync(user);
+
+        try
+        {
+            await _emailService.SendTemplatedEmailAsync(
+                user.Email,
+                "Your password has been changed — Studio Mesh CRM",
+                "PasswordResetConfirmation",
+                new PasswordResetConfirmationModel(user.FullName, user.Email)
+            );
+        }
+        catch
+        {
+            // Confirmation email failure must not roll back a successful password reset
+        }
+
+        return true;
+    }
+
+    public async Task<bool> ChangePasswordAsync(Guid userId, string currentPassword, string newPassword)
+    {
+        var user = await _userRepository.GetByIdAsync(userId);
+        if (user == null || !BCrypt.Net.BCrypt.Verify(currentPassword, user.PasswordHash)) return false;
+
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+        await _userRepository.UpdateAsync(user);
+        return true;
     }
 
     public async Task<(AuthResponse? Response, string? AccessToken, string? RefreshToken)> RefreshTokenAsync(string token, string ipAddress)
@@ -164,7 +239,6 @@ public class AuthService
 
         if (!refreshToken.IsActive) return (null, null, null);
 
-        // Rotate token
         var newRefreshToken = RotateRefreshToken(refreshToken, ipAddress);
         user.RefreshTokens.Add(newRefreshToken);
 
@@ -175,10 +249,16 @@ public class AuthService
         return (new AuthResponse
         {
             Email = user.Email,
-            FullName = user.FullName
+            FullName = user.FullName,
+            Role = user.Role.ToString(),
+            TenantId = user.TenantId,
+            TenantSlug = user.Tenant?.Slug ?? string.Empty,
+            IsOnboardingCompleted = user.Tenant?.OnboardingCompleted ?? false,
+            AvatarUrl = user.AvatarUrl,
+            JobTitle = user.JobTitle,
+            BrandColor = user.Tenant?.BrandColor
         }, accessToken, newRefreshToken.Token);
     }
-
 
     public async Task<bool> RevokeTokenAsync(string token, string ipAddress)
     {
@@ -188,11 +268,38 @@ public class AuthService
         var refreshToken = user.RefreshTokens.Single(x => x.Token == token);
         if (!refreshToken.IsActive) return false;
 
-        // Revoke token
         refreshToken.Revoked = DateTime.UtcNow;
         refreshToken.RevokedByIp = ipAddress;
 
         await _userRepository.UpdateAsync(user);
+        return true;
+    }
+
+    public async Task<bool> CompleteOnboardingAsync(Guid userId, OnboardingRequest request)
+    {
+        var user = await _userRepository.GetByIdAsync(userId);
+        if (user == null) return false;
+
+        var tenant = await _tenantRepository.GetByIdAsync(user.TenantId);
+        if (tenant == null) return false;
+
+        user.JobTitle = request.JobTitle;
+        user.PhoneNumber = request.PhoneNumber;
+        user.AvatarUrl = request.LogoUrl;
+
+        tenant.Industry = request.Industry;
+        tenant.CompanySize = request.CompanySize;
+        tenant.Website = request.Website;
+        tenant.TargetMonthlyRevenue = request.TargetMonthlyRevenue;
+        tenant.BusinessAddress = request.BusinessAddress;
+        tenant.BrandColor = request.BrandColor;
+        tenant.LogoUrl = request.LogoUrl;
+        tenant.OnboardingCompleted = true;
+
+        // UpdateAsync on user triggers SaveChangesAsync — both user and tenant are tracked
+        // in the same DbContext so both are persisted in the same transaction.
+        await _userRepository.UpdateAsync(user);
+
         return true;
     }
 
@@ -214,7 +321,7 @@ public class AuthService
             issuer: jwtSettings["Issuer"],
             audience: jwtSettings["Audience"],
             claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(15), // Short-lived access token
+            expires: DateTime.UtcNow.AddMinutes(15),
             signingCredentials: creds
         );
 
@@ -241,16 +348,4 @@ public class AuthService
         refreshToken.ReplacedByToken = newRefreshToken.Token;
         return newRefreshToken;
     }
-
-    public async Task<bool> CompleteOnboardingAsync(Guid userId, OnboardingRequest request)
-    {
-        var user = await _userRepository.GetByIdAsync(userId);
-        if (user == null) return false;
-
-        // Implement onboarding logic here
-        
-        await _userRepository.UpdateAsync(user);
-        return true;
-    }
 }
-

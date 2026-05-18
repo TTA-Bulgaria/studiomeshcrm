@@ -1,240 +1,105 @@
 'use client';
 
-import { useState } from 'react';
-import { Container, Section, Card, CardHeader, CardTitle, CardContent } from '@/components/ui/LayoutPrimitives';
+import { useRouter } from 'next/navigation';
+import { Container, Section } from '@/components/ui/LayoutPrimitives';
 import { Button } from '@/components/ui/Button';
-import { Modal } from '@/components/ui/Modal';
-import { toast } from 'sonner';
-import { CheckCircle2, ExternalLink } from 'lucide-react';
-
-interface Integration {
-  name: string;
-  description: string;
-  webhookUrl: string;
-  status: string;
-  iconColor: string;
-  setupSteps: string[];
-  docsUrl: string;
-}
+import { CheckCircle2, ArrowRight, BarChart2, Zap, Link2 } from 'lucide-react';
 
 export default function IntegrationsPage() {
-  const webhookBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-  const [configuring, setConfiguring] = useState<Integration | null>(null);
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text).catch(() => {
-      // Fallback for non-https contexts
-      const el = document.createElement('textarea');
-      el.value = text;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand('copy');
-      document.body.removeChild(el);
-    });
-    toast.success('Webhook URL copied to clipboard');
-  };
-
-  const integrations: Integration[] = [
-    {
-      name: 'Meta Ads (Facebook/Instagram)',
-      description: 'Ingest leads directly from Meta Lead Ads in real-time.',
-      webhookUrl: `${webhookBaseUrl}/api/webhooks/meta/lead`,
-      status: 'Ready',
-      iconColor: 'bg-blue-600',
-      docsUrl: 'https://developers.facebook.com/docs/marketing-api/guides/lead-ads/retrieving/',
-      setupSteps: [
-        'Go to your Meta Business Suite → All Tools → Leads Centre.',
-        'Select the Lead Form you want to connect.',
-        'Under "Webhooks", click "Add Webhook Subscription".',
-        'Paste the webhook URL below into the "Callback URL" field.',
-        'Set the Verify Token to your API secret key (contact your admin).',
-        'Click "Verify and Save" — Meta will send a verification ping.',
-        'Test by submitting a lead on your page — it should appear in Leads within seconds.',
-      ],
-    },
-    {
-      name: 'Google Ads',
-      description: 'Track spend and performance metrics natively.',
-      webhookUrl: `${webhookBaseUrl}/api/webhooks/google/performance`,
-      status: 'Ready',
-      iconColor: 'bg-red-500',
-      docsUrl: 'https://developers.google.com/google-ads/api/docs/start',
-      setupSteps: [
-        'Open Google Ads → Tools & Settings → Linked accounts.',
-        'Select "Google Analytics" or "Tag Manager" as the connection method.',
-        'In your Google Tag Manager, add a new "Webhook" trigger.',
-        'Paste the webhook URL below as the endpoint.',
-        'Configure the trigger to fire on conversion events (purchases, form fills).',
-        'Publish your container and verify in the Network tab that POST requests are sent to this URL.',
-      ],
-    },
-    {
-      name: 'TikTok Ads',
-      description: 'Automated performance reporting for TikTok campaigns.',
-      webhookUrl: `${webhookBaseUrl}/api/webhooks/tiktok/performance`,
-      status: 'Ready',
-      iconColor: 'bg-black',
-      docsUrl: 'https://ads.tiktok.com/marketing_api/docs?id=1701890979375106',
-      setupSteps: [
-        'Log in to TikTok Ads Manager → Tools → Events.',
-        'Click "Web Events" → "Set Up Web Events".',
-        'Choose "Events API" as the connection method.',
-        'In the Events API section, set the Pixel ID and paste the webhook URL below.',
-        'Map your conversion events (Add to Cart, Purchase, Lead) to the webhook.',
-        'Use the "Test Events" tool in TikTok to confirm the connection is live.',
-      ],
-    },
-  ];
+  const router = useRouter();
 
   return (
     <Container>
-      <Section className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Integrations &amp; Webhooks</h1>
+      <Section>
+        <h1 className="text-2xl font-bold tracking-tight">Integrations</h1>
+        <p className="text-slate-500 text-sm mt-1">
+          Connect your ad platforms to track spend, CPL, and ROAS per project.
+        </p>
       </Section>
 
       <Section>
-        <div className="grid gap-6">
-          {integrations.map((app) => (
-            <Card key={app.name} className="overflow-hidden">
-              <div className="flex flex-col md:flex-row">
-                <div className={`w-full md:w-2 ${app.iconColor}`} />
-                <div className="flex-1 p-6">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                      <CardTitle className="text-xl">{app.name}</CardTitle>
-                      <p className="text-sm text-muted-foreground mt-1">{app.description}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs font-semibold px-2 py-1 bg-green-100 text-green-800 rounded-full">
-                        {app.status}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setConfiguring(app)}
-                        id={`configure-${app.name.replace(/\s+/g, '-').toLowerCase()}`}
-                      >
-                        Configure
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                    <label className="text-xs font-bold uppercase text-slate-500 block mb-2">
-                      Native Webhook URL
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <code className="flex-1 text-xs bg-white p-2 rounded border truncate">
-                        {app.webhookUrl}
-                      </code>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => copyToClipboard(app.webhookUrl)}
-                      >
-                        Copy
-                      </Button>
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-2">
-                      Paste this URL into your {app.name.split(' ')[0]} Developer Dashboard to
-                      enable automatic ingestion.
-                    </p>
-                  </div>
-                </div>
+        {/* Meta Ads — available */}
+        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden mb-4">
+          <div className="p-6 flex flex-col sm:flex-row gap-5">
+            <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-xl shrink-0">
+              f
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                <h2 className="text-base font-semibold text-slate-900">Meta Ads (Facebook / Instagram)</h2>
+                <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                  Available
+                </span>
               </div>
-            </Card>
+              <p className="text-sm text-slate-500 mb-4">
+                Connect your Facebook ad accounts to pull real spend, impressions, clicks, and
+                conversions into each project. ROI and ROAS are calculated automatically against
+                your signed contracts.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {[
+                  'Per-project ad account linking',
+                  'Daily automatic sync',
+                  'Real-time CPL and ROAS analytics',
+                  'Token expiry detection with reconnect prompt',
+                ].map(f => (
+                  <div key={f} className="flex items-center gap-2 text-xs text-slate-600">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    {f}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="border-t border-slate-100 bg-slate-50 px-6 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <p className="text-xs text-slate-500 flex items-center gap-1.5">
+              <Link2 className="w-3.5 h-3.5 shrink-0" />
+              Connect from inside a project — open any project and go to the <strong className="font-semibold text-slate-700">Ads</strong> tab.
+            </p>
+            <Button
+              size="sm"
+              className="flex items-center gap-1.5 shrink-0"
+              onClick={() => router.push('/projects')}
+            >
+              Go to Projects <ArrowRight className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Coming soon platforms */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          {[
+            {
+              icon: <BarChart2 className="w-5 h-5 text-red-500" />,
+              iconBg: 'bg-red-50',
+              name: 'Google Ads',
+              description: 'Track spend and conversions from Google Search and Display campaigns.',
+            },
+            {
+              icon: <Zap className="w-5 h-5 text-slate-700" />,
+              iconBg: 'bg-slate-100',
+              name: 'TikTok Ads',
+              description: 'Automated performance reporting for TikTok campaigns.',
+            },
+          ].map(p => (
+            <div key={p.name} className="rounded-2xl border border-slate-200 bg-white p-5 flex items-start gap-4 opacity-70">
+              <div className={`w-10 h-10 rounded-xl ${p.iconBg} flex items-center justify-center shrink-0`}>
+                {p.icon}
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="text-sm font-semibold text-slate-800">{p.name}</h3>
+                  <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-400 rounded-full border border-slate-200">
+                    Coming soon
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">{p.description}</p>
+              </div>
+            </div>
           ))}
         </div>
       </Section>
-
-      <Section title="API Analytics Infrastructure" className="mt-8">
-        <Card className="bg-slate-900 text-white">
-          <CardContent className="py-8">
-            <div className="flex flex-col md:flex-row items-center gap-8 px-4">
-              <div className="flex-1">
-                <h3 className="text-xl font-bold mb-2">Powering Agency Intelligence</h3>
-                <p className="text-slate-300 text-sm leading-relaxed">
-                  These native connectors feed directly into our ROI calculation engine. By
-                  bridging the gap between ad spend and legal contracts, we provide real-time Cost
-                  Per Lead (CPL) and Return on Ad Spend (ROAS) analytics.
-                </p>
-              </div>
-              <div className="flex gap-4">
-                <div className="h-16 w-16 rounded-full bg-white/10 flex items-center justify-center font-bold text-2xl">A</div>
-                <div className="h-16 w-16 rounded-full bg-white/10 flex items-center justify-center font-bold text-2xl">I</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </Section>
-
-      {/* Configure modal */}
-      {configuring && (
-        <Modal
-          isOpen={!!configuring}
-          onClose={() => setConfiguring(null)}
-          title={`Configure ${configuring.name}`}
-          className="max-w-xl"
-        >
-          <div className="space-y-6">
-            <p className="text-sm text-muted-foreground">
-              Follow these steps to connect {configuring.name} to your Agency CRM webhook.
-            </p>
-
-            {/* Numbered setup steps */}
-            <ol className="space-y-3">
-              {configuring.setupSteps.map((step, i) => (
-                <li key={i} className="flex gap-3 text-sm">
-                  <span className="h-6 w-6 rounded-full bg-primary/10 text-primary font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
-                    {i + 1}
-                  </span>
-                  <span className="leading-relaxed text-foreground">{step}</span>
-                </li>
-              ))}
-            </ol>
-
-            {/* Webhook URL callout */}
-            <div className="p-4 bg-muted rounded-lg space-y-2">
-              <p className="text-xs font-bold uppercase text-muted-foreground">Your Webhook URL</p>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 text-xs bg-background p-2 rounded border truncate">
-                  {configuring.webhookUrl}
-                </code>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => copyToClipboard(configuring.webhookUrl)}
-                >
-                  Copy
-                </Button>
-              </div>
-            </div>
-
-            {/* Docs link */}
-            <div className="flex items-center justify-between pt-2 border-t">
-              <a
-                href={configuring.docsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-sm text-primary hover:underline"
-              >
-                <ExternalLink className="h-4 w-4" />
-                Official {configuring.name.split(' ')[0]} Documentation
-              </a>
-              <Button
-                onClick={() => {
-                  setConfiguring(null);
-                  toast.success(`${configuring.name} configuration saved`);
-                }}
-                className="flex items-center gap-2"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                Done
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
     </Container>
   );
 }

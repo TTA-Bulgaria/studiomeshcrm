@@ -18,6 +18,14 @@ export const ROIAnalytics = ({ projectId }: ROIAnalyticsProps) => {
     return <div className="h-[300px] flex items-center justify-center bg-muted animate-pulse rounded-lg">Loading ROI Analytics...</div>;
   }
 
+  if (!analytics) {
+    return <div className="h-[300px] flex items-center justify-center text-slate-400 text-sm">No ad metrics data yet. Connect a Facebook ad account to see ROI analytics.</div>;
+  }
+
+  const spendBarWidth = analytics.totalSpend > 0
+    ? Math.min(100, (analytics.totalSpend / (analytics.totalSpend * 1.5)) * 100)
+    : 0;
+
   const chartData = metrics.map(m => ({
     date: new Date(m.date).toLocaleDateString(),
     spend: m.spend,
@@ -34,18 +42,18 @@ export const ROIAnalytics = ({ projectId }: ROIAnalyticsProps) => {
         </CardHeader>
         <CardContent>
           <div className="text-4xl font-bold">
-             {analytics?.projectROI.toFixed(1)}%
+             {analytics.projectROI.toFixed(1)}%
           </div>
           <p className="text-xs text-emerald-400 mt-2 font-medium">
-             ROAS: {analytics?.roas.toFixed(2)}x
+             ROAS: {analytics.roas.toFixed(2)}x
           </p>
           <div className="mt-6 space-y-2">
              <div className="flex justify-between text-xs font-semibold uppercase opacity-60">
                 <span>Total Spend</span>
-                <span>${analytics?.totalSpend.toLocaleString()}</span>
+                <span>${analytics.totalSpend.toLocaleString()}</span>
              </div>
              <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-emerald-500 h-full" style={{ width: '70%' }} />
+                <div className="bg-emerald-500 h-full" style={{ width: `${spendBarWidth}%` }} />
              </div>
           </div>
         </CardContent>
@@ -58,7 +66,7 @@ export const ROIAnalytics = ({ projectId }: ROIAnalyticsProps) => {
         </CardHeader>
         <CardContent>
           <div className="text-4xl font-bold text-rose-600">
-             ${analytics?.costPerLead.toFixed(2)}
+             ${analytics.costPerLead.toFixed(2)}
           </div>
           <p className="text-xs text-muted-foreground mt-2">
              Target: &lt;$50.00
@@ -80,19 +88,19 @@ export const ROIAnalytics = ({ projectId }: ROIAnalyticsProps) => {
         </CardHeader>
         <CardContent>
           <div className="text-3xl font-bold text-blue-600">
-             {analytics?.conversionRate.toFixed(1)}%
+             {analytics.conversionRate.toFixed(1)}%
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-             CTR: {analytics?.ctr.toFixed(1)}%
+             CTR: {analytics.ctr.toFixed(1)}%
           </p>
           <div className="mt-4 flex flex-col gap-2">
               <div className="flex justify-between text-xs">
                  <span>Impressions</span>
-                 <span className="font-bold">{analytics?.totalImpressions.toLocaleString()}</span>
+                 <span className="font-bold">{analytics.totalImpressions.toLocaleString()}</span>
               </div>
               <div className="flex justify-between text-xs">
                  <span>Total Clicks</span>
-                 <span className="font-bold">{analytics?.totalClicks.toLocaleString()}</span>
+                 <span className="font-bold">{analytics.totalClicks.toLocaleString()}</span>
               </div>
           </div>
         </CardContent>

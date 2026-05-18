@@ -60,7 +60,7 @@ export default function ResetPasswordPage() {
     setError('');
     setIsLoading(true);
     try {
-      await api.post('/api/auth/reset-password', { token, password });
+      await api.post('/api/auth/reset-password', { token, newPassword: password });
       setIsSuccess(true);
     } catch (err) {
       // Use typed ApiError status check — not fragile string matching
