@@ -153,7 +153,8 @@ public class AuthService
         user.EmailVerificationToken = token;
         await _userRepository.UpdateAsync(user);
 
-        var appUrl = _configuration["FrontendUrl"] ?? _configuration["AppUrl"] ?? "https://app.studiomeshcrm.com";
+        var appUrl = _configuration["FrontendUrl"] ?? _configuration["AppUrl"]
+            ?? throw new InvalidOperationException("FrontendUrl is not configured. Set FrontendUrl or AppUrl in application configuration.");
         var verificationLink = $"{appUrl}/verify-email?token={token}";
 
         await _emailService.SendTemplatedEmailAsync(
@@ -174,7 +175,8 @@ public class AuthService
         user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1);
         await _userRepository.UpdateAsync(user);
 
-        var appUrl = _configuration["FrontendUrl"] ?? _configuration["AppUrl"] ?? "https://app.studiomeshcrm.com";
+        var appUrl = _configuration["FrontendUrl"] ?? _configuration["AppUrl"]
+            ?? throw new InvalidOperationException("FrontendUrl is not configured. Set FrontendUrl or AppUrl in application configuration.");
         var resetLink = $"{appUrl}/reset-password/{token}";
 
         try

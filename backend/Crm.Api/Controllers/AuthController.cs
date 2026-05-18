@@ -3,6 +3,7 @@ using Crm.Application.Services;
 using Crm.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Crm.Api.Controllers;
 
@@ -24,10 +25,11 @@ public class AuthController : ControllerBase
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting("auth-login")]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        _logger.LogInformation("Login attempt for user: {Email}", request.Email);
+        _logger.LogInformation("Login attempt received");
         (AuthResponse? response, string? accessToken, string? refreshToken) result;
         try
         {
@@ -41,11 +43,11 @@ public class AuthController : ControllerBase
         var (response, accessToken, refreshToken) = result;
         if (response == null)
         {
-            _logger.LogWarning("Failed login attempt for user: {Email}", request.Email);
+            _logger.LogWarning("Authentication failed for login attempt");
             return Unauthorized(new { Message = "Invalid email or password." });
         }
 
-        _logger.LogInformation("User {Email} logged in successfully", request.Email);
+        _logger.LogInformation("User {UserId} logged in successfully", response.Id);
         SetTokenCookie("refresh_token", refreshToken!);
         SetTokenCookie("access_token", accessToken!);
 
@@ -57,7 +59,7 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
-        _logger.LogInformation("Registration attempt for email: {Email}, Agency: {Agency}", request.Email, request.AgencyName);
+        _logger.LogInformation("Registration attempt received");
         var response = await _authService.RegisterAsync(request);
 
         if (response == null)
@@ -78,6 +80,7 @@ public class AuthController : ControllerBase
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting("auth-sensitive")]
     [HttpPost("resend-verification")]
     public async Task<IActionResult> ResendVerification([FromBody] ForgotPasswordRequest request)
     {
@@ -116,7 +119,7 @@ public class AuthController : ControllerBase
             Domain = _env.IsDevelopment() ? null : ".studiomeshcrm.com",
             Path = "/",
             Secure = !_env.IsDevelopment(),
-            SameSite = _env.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.None,
+            SameSite = _env.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.Strict,
         };
         Response.Cookies.Delete("access_token", deleteOptions);
         Response.Cookies.Delete("refresh_token", deleteOptions);
@@ -138,6 +141,7 @@ public class AuthController : ControllerBase
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting("auth-sensitive")]
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
     {
@@ -146,6 +150,7 @@ public class AuthController : ControllerBase
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting("auth-sensitive")]
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
     {
@@ -187,18 +192,13 @@ public class AuthController : ControllerBase
             HttpOnly = true,
             Expires = name == "refresh_token" ? DateTime.UtcNow.AddDays(7) : DateTime.UtcNow.AddMinutes(15),
             Secure = !_env.IsDevelopment(),
-            SameSite = _env.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.None,
+            SameSite = _env.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.Strict,
             Domain = _env.IsDevelopment() ? null : ".studiomeshcrm.com",
             Path = "/"
         };
         Response.Cookies.Append(name, token, cookieOptions);
     }
 
-    private string GetIpAddress()
-    {
-        if (Request.Headers.ContainsKey("X-Forwarded-For"))
-            return Request.Headers["X-Forwarded-For"]!;
-        else
-            return HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "N/A";
-    }
+    private string GetIpAddress() =>
+        HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "N/A";
 }

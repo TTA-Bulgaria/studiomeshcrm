@@ -11,18 +11,18 @@ import { Eye, EyeOff, Mail } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 
-/**
- * Validate a redirect destination from the URL query string.
- * Only allows internal relative paths that are not auth pages.
- * Returns undefined for anything that could cause an open redirect or loop.
- */
 function getSafeRedirect(raw: string | null): string | undefined {
   if (!raw) return undefined;
-  // Reject absolute URLs and protocol-relative paths (//evil.com).
-  if (!raw.startsWith('/') || raw.startsWith('//')) return undefined;
-  // Reject auth pages — redirecting back to them would create a circular bounce.
-  if (['/login', '/register', '/signup'].some((p) => raw.startsWith(p))) return undefined;
-  return raw;
+  try {
+    const url = new URL(raw, window.location.origin);
+    // Reject cross-origin destinations (catches javascript:, data:, //evil.com, etc.)
+    if (url.origin !== window.location.origin) return undefined;
+    // Reject auth pages to avoid redirect loops
+    if (['/login', '/register', '/signup'].some((p) => url.pathname.startsWith(p))) return undefined;
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return undefined;
+  }
 }
 
 function LoginPageContent() {

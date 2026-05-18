@@ -159,6 +159,9 @@ public class FacebookOAuthController : ControllerBase
         if (oauthSession == null || oauthSession.ExpiresAt < DateTime.UtcNow)
             return NotFound(new { message = "Session not found or expired. Please reconnect." });
 
+        if (oauthSession.TenantId != (_userContext.TenantId ?? Guid.Empty))
+            return NotFound(new { message = "Session not found or expired. Please reconnect." });
+
         var accounts = JsonSerializer.Deserialize<List<FacebookAdAccount>>(oauthSession.AdAccountsJson ?? "[]")
                        ?? new List<FacebookAdAccount>();
 
@@ -182,6 +185,9 @@ public class FacebookOAuthController : ControllerBase
             .FirstOrDefaultAsync(s => s.Key == request.Session && s.Phase == FacebookOAuthPhase.Session);
 
         if (oauthSession == null || oauthSession.ExpiresAt < DateTime.UtcNow)
+            return BadRequest(new { message = "Session expired. Please reconnect Facebook." });
+
+        if (oauthSession.TenantId != (_userContext.TenantId ?? Guid.Empty))
             return BadRequest(new { message = "Session expired. Please reconnect Facebook." });
 
         _db.FacebookOAuthSessions.Remove(oauthSession);
@@ -246,8 +252,10 @@ public class FacebookOAuthController : ControllerBase
         }
     }
 
-    private string CallbackUri => $"{_config["AppUrl"] ?? "https://studiomeshcrm.com"}/api/facebook/oauth/callback";
-    private string FrontendUrl => _config["AppUrl"] ?? "https://studiomeshcrm.com";
+    private string CallbackUri =>
+        $"{_config["AppUrl"] ?? throw new InvalidOperationException("AppUrl is not configured.")}/api/facebook/oauth/callback";
+    private string FrontendUrl =>
+        _config["AppUrl"] ?? throw new InvalidOperationException("AppUrl is not configured.");
 }
 
 // ── Supporting types ────────────────────────────────────────────────────────

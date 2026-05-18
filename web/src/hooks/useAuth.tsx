@@ -69,6 +69,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (data.tenantSlug) {
+      // Validate before using slug to build a URL — rejects any server-supplied value
+      // that could form a malicious subdomain (e.g. injected via compromised API response).
+      if (!/^[a-z0-9-]+$/.test(data.tenantSlug)) {
+        throw new Error('Invalid tenant slug received from server');
+      }
       const { hostname, protocol, port } = window.location;
       if (hostname !== 'localhost') {
         const parts = hostname.split('.');
